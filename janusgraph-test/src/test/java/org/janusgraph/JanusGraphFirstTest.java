@@ -46,7 +46,7 @@ public class JanusGraphFirstTest {
             .open("D:\\code\\janusgraph\\janusgraph-dist\\src\\assembly\\cfilter\\conf\\janusgraph-hbase-es.properties");
 
         // 使用GraphOfTheGodsFactory加载“The Graph of the Gods”图，这是JanusGraph用于测试自定义的一个图
-         GraphOfTheGodsFactory.load(graph); // 第一次运行时添加，之后的运行将该语句注释掉，不需要重复的load
+//         GraphOfTheGodsFactory.load(graph); // 第一次运行时添加，之后的运行将该语句注释掉，不需要重复的load
 
         // 获取图遍历对象实例
         GraphTraversalSource g = graph.traversal();
