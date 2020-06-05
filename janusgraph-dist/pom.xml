@@ -171,25 +171,25 @@
 
     <build>
         <plugins>
-            <plugin>
-                <groupId>com.googlecode.maven-download-plugin</groupId>
-                <artifactId>download-maven-plugin</artifactId>
-                <version>1.5.0</version>
-                <executions>
-                    <execution>
-                        <id>get-elasticsearch</id>
-                        <phase>generate-test-resources</phase>
-                        <goals>
-                            <goal>wget</goal>
-                        </goals>
-                        <configuration>
-                            <url>https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-${elasticsearch.version}-linux-x86_64.tar.gz</url>
-                            <outputFileName>elasticsearch.tar.gz</outputFileName>
-                            <outputDirectory>${project.build.directory}</outputDirectory>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
+<!--            <plugin>-->
+<!--                <groupId>com.googlecode.maven-download-plugin</groupId>-->
+<!--                <artifactId>download-maven-plugin</artifactId>-->
+<!--                <version>1.5.0</version>-->
+<!--                <executions>-->
+<!--                    <execution>-->
+<!--                        <id>get-elasticsearch</id>-->
+<!--                        <phase>generate-test-resources</phase>-->
+<!--                        <goals>-->
+<!--                            <goal>wget</goal>-->
+<!--                        </goals>-->
+<!--                        <configuration>-->
+<!--                            <url>https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-${elasticsearch.version}-linux-x86_64.tar.gz</url>-->
+<!--                            <outputFileName>elasticsearch.tar.gz</outputFileName>-->
+<!--                            <outputDirectory>${project.build.directory}</outputDirectory>-->
+<!--                        </configuration>-->
+<!--                    </execution>-->
+<!--                </executions>-->
+<!--            </plugin>-->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-antrun-plugin</artifactId>
