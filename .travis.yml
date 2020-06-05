@@ -1,0 +1,247 @@
+# Copyright 2019 JanusGraph Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+language: java
+os: linux
+dist: xenial
+services:
+  - docker
+jdk:
+  - openjdk8
+addons:
+  apt:
+    update: true
+
+git:
+  depth: false
+
+cache:
+  directories:
+    - ${HOME}/.m2
+
+env:
+  global:
+    # This is the encrypted COVERITY_SCAN_TOKEN, created via the
+    # `travis encrypt` command using the project repo's public key.
+    - secure: "v5ixqTeb74y0vRuPcDbe3C28GDDYvqyEXA2dt+9UVU6GG7WpnmpkBf05gI1dIhp51lBhwx9WSlFBtzho+KdCBmNY/CzBRhVHe/lCQYK9Hb6uGPvuwBvC0WjJgJXsVrLFjppeRhcf+OAweVQ3uw2RPMDRvKIVMUcO1BTFjjJl6REJXNUdzGS57MtH2mmRyOEz250EwgqUELZvcOytG7fNrjMJKVK2nSsoxi0BqZIpItTWPWWeQ1wi1FplJ18A2qtD+MPfAGNSB+/a+r0Av+VCT2eGl06ZyZAzP3q/vG5IYjQ3AJsSPqcZUt4ms+2us1+kwuzXIILjzZmcfImu29+y/thndU5E5b2v+nZ4H69CUCc5OmKW2RwozLNmBIUhO0n+35va/J7FiPIqm3pwxCz5vWA3YTHDADxnIYe7+9uY/+dOK/AvP5fyu7u07vuF3liKNBdrX7ylP3kYc7FXGmYl8wCZv31iy1yTtndQ9qKef7bo8lM9Cdh39KyowrygH+Um7pr9gqf2S9jn99nQ3bib32fBWgBkLpJRwhZYHPUupZjZfgu/9woby0DuriuHZKMqZd7QUawYz6wXGlhzu78x5Tohlj1pGBwHYdcJ/Tm3PiEpyH4aYQLffkjGHJAcCW5tO8QbB0qrLYWC8xVMWuFz1TpSBRXOqVYdBfIa2UZDtOU="
+    - COVERITY_EMAIL="sjudeng@gmail.com"
+    # Default Elasticsearch heap size can be too large for Travis
+    - ES_JAVA_OPTS="-Xms256m -Xmx512m"
+    - export STRUCTOR_VERSION=v1.7.1
+
+stages:
+  - test
+  - documentation
+  - deploy
+
+x-template-full:
+  &FULL_BUILD_JOB
+  stage: test
+  install: travis_wait mvn clean install --projects janusgraph-${MODULE} --also-make -DskipTests=true
+    -Dmaven.javadoc.skip=true --batch-mode --show-version ${INSTALL_ARGS};
+  script: travis_wait 50 mvn verify --projects janusgraph-${MODULE} ${ARGS};
+  if: type = cron OR commit_message =~ /\[full build\]/
+
+x-template-standard:
+  &STANDARD_TEST_JOB
+  stage: test
+  install: travis_wait mvn clean install --projects janusgraph-${MODULE} --also-make -DskipTests=true 
+    -Dmaven.javadoc.skip=true --batch-mode --show-version ${INSTALL_ARGS};
+  script: travis_wait 50 mvn verify --projects janusgraph-${MODULE} -Pcoverage ${ARGS};
+  after_success: bash <(curl -s https://codecov.io/bash);
+  if: commit_message !~ /\[doc only\]/
+
+jobs:
+  include:
+    - stage: test
+      env: MODULE='release'
+      before_install: sudo apt-get -y install expect
+      install: mvn clean install -Pjanusgraph-release -Dgpg.skip=true -DskipTests=true
+      script: mvn install -pl janusgraph-dist -Pjanusgraph-release -Dgpg.skip=true
+      if: commit_message !~ /\[doc only\]/
+
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='lucene'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='solr' ARGS='-Pdocker,solr7'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='es' ARGS='-Pelasticsearch7'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='es' ARGS='-Pelasticsearch6'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='es' ARGS='-Pelasticsearch60'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='berkeleyje'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='driver'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='test'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='inmemory' ARGS='-Dtest.skip.tp=false'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='cassandra' ARGS='-Pcassandra2-byteordered -Dtest=**/diskstorage/cassandra/thrift/*'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='cassandra' ARGS='-Pcassandra2-murmur -Dtest=**/diskstorage/cassandra/thrift/*'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='cassandra' ARGS='-Pcassandra2-murmur-ssl -Dtest=**/diskstorage/cassandra/thrift/ThriftStoreTest.java'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='cassandra' ARGS='-Pcassandra2-byteordered -Dtest=**/graphdb/thrift/*'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='cassandra' ARGS='-Pcassandra2-murmur -Dtest=**/graphdb/thrift/*'
+
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='cassandra' ARGS='-Pcassandra2-byteordered -Dtest=**/diskstorage/cassandra/astyanax/*'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='cassandra' ARGS='-Pcassandra2-murmur -Dtest=**/diskstorage/cassandra/astyanax/*'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='cassandra' ARGS='-Pcassandra2-murmur-ssl -Dtest=**/diskstorage/cassandra/astyanax/AstyanaxStoreTest.java'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='cassandra' ARGS='-Pcassandra2-byteordered -Dtest=**/graphdb/astyanax/*'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='cassandra' ARGS='-Pcassandra2-murmur -Dtest=**/graphdb/astyanax/*'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='cassandra' ARGS='-Dtest=**/diskstorage/cassandra/embedded/*'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='cassandra' ARGS='-Dtest=***/cassandra/*,*/graphdb/embedded/*'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='cassandra' ARGS='-Pcassandra2-murmur -Dtest=**/hadoop/*'
+
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='hbase-parent/janusgraph-hbase-10' ARGS='-Dtest=**/diskstorage/hbase/*'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='hbase-parent/janusgraph-hbase-10' ARGS='-Dtest=**/graphdb/hbase/*'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='hbase-parent/janusgraph-hbase-10' ARGS='-Dtest=**/hadoop/*'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='hbase-parent/janusgraph-hbase-10' INSTALL_ARGS='-Dhbase.profile -Phbase2' ARGS='-Dtest=**/diskstorage/hbase/* -Dhbase.profile -Phbase2'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='hbase-parent/janusgraph-hbase-10' INSTALL_ARGS='-Dhbase.profile -Phbase2' ARGS='-Dtest=**/graphdb/hbase/* -Dhbase.profile -Phbase2'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='hbase-parent/janusgraph-hbase-10' INSTALL_ARGS='-Dhbase.profile -Phbase2' ARGS='-Dtest=**/hadoop/* -Dhbase.profile -Phbase2'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='cql' ARGS='-Pcassandra2-byteordered -Dtest=**/diskstorage/cql/*'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='cql' ARGS='-Pcassandra2-murmur -Dtest=**/diskstorage/cql/*'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='cql' ARGS='-Pcassandra2-murmur-ssl -Dtest=**/diskstorage/cql/CQLStoreTest.java'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='cql' ARGS='-Pcassandra2-byteordered -Dtest=**/graphdb/cql/*'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='cql' ARGS='-Pcassandra2-murmur -Dtest=**/graphdb/cql/*'
+    - <<: *STANDARD_TEST_JOB
+      env: MODULE='cql' ARGS='-Pcassandra2-murmur -Dtest=**/hadoop/*'
+
+    - <<: *FULL_BUILD_JOB
+      env: MODULE='cql' ARGS='-Dtest=**/graphdb/cql/* -Dtest.skip.byteorderedpartitioner=true -Dtest.skip.murmur-serial=true -Dtest.skip.murmur-ssl=true'
+    - <<: *FULL_BUILD_JOB
+      env: MODULE='cassandra' ARGS='-Pcassandra3-byteordered -Dtest=**/graphdb/thrift/* -Dcassandra.docker.version=3.11.4'
+    - <<: *FULL_BUILD_JOB
+      env: MODULE='cassandra' ARGS='-Pcassandra3-murmur -Dtest=**/graphdb/thrift/* -Dcassandra.docker.version=3.11.4'
+    - <<: *FULL_BUILD_JOB
+      env: MODULE='cassandra' ARGS='-Pcassandra3-byteordered -Dtest=**/diskstorage/cassandra/astyanax/* -Dcassandra.docker.version=3.11.4'
+    - <<: *FULL_BUILD_JOB
+      env: MODULE='cassandra' ARGS='-Pcassandra3-murmur -Dtest=**/diskstorage/cassandra/astyanax/* -Dcassandra.docker.version=3.11.4'
+    - <<: *FULL_BUILD_JOB
+      env: MODULE='cassandra' ARGS='-Pcassandra3-murmur-ssl -Dtest=**/diskstorage/cassandra/astyanax/AstyanaxStoreTest.java -Dcassandra.docker.version=3.11.4'
+    - <<: *FULL_BUILD_JOB
+      env: MODULE='cassandra' ARGS='-Pcassandra3-byteordered -Dtest=**/graphdb/astyanax/* -Dcassandra.docker.version=3.11.4'
+    - <<: *FULL_BUILD_JOB
+      env: MODULE='cassandra' ARGS='-Pcassandra3-murmur -Dtest=**/graphdb/astyanax/* -Dcassandra.docker.version=3.11.4'
+    - <<: *FULL_BUILD_JOB
+      env: MODULE='cql' ARGS=' -Pcassandra3-byteordered -Dcassandra.docker.version=3.11.4'
+    - <<: *FULL_BUILD_JOB
+      env: MODULE='cql' ARGS=' -Pcassandra3-murmur -Dcassandra.docker.version=3.11.4'
+    - <<: *FULL_BUILD_JOB
+      env: MODULE='cql' ARGS=' -Pcassandra3-murmur-ssl -Dcassandra.docker.version=3.11.4 -Dtest=**/diskstorage/cql/CQLStoreTest.java'
+    - <<: *FULL_BUILD_JOB
+      env: MODULE='cql' ARGS=' -Pcassandra3-murmur-client-auth -Dcassandra.docker.version=3.11.4 -Dtest=**/diskstorage/cql/CQLStoreTest.java'
+    
+    - <<: *FULL_BUILD_JOB
+      env: MODULE='cassandra' ARGS='-Pcassandra3-byteordered -Dtest=**/graphdb/thrift/* -Dcassandra.docker.version=3.0.18'
+    - <<: *FULL_BUILD_JOB
+      env: MODULE='cassandra' ARGS='-Pcassandra3-murmur -Dtest=**/graphdb/thrift/* -Dcassandra.docker.version=3.0.18'
+    - <<: *FULL_BUILD_JOB
+      env: MODULE='cassandra' ARGS='-Pcassandra3-byteordered -Dtest=**/diskstorage/cassandra/astyanax/* -Dcassandra.docker.version=3.0.18'
+    - <<: *FULL_BUILD_JOB
+      env: MODULE='cassandra' ARGS='-Pcassandra3-murmur -Dtest=**/diskstorage/cassandra/astyanax/* -Dcassandra.docker.version=3.0.18'
+    - <<: *FULL_BUILD_JOB
+      env: MODULE='cassandra' ARGS='-Pcassandra3-murmur-ssl -Dtest=**/diskstorage/cassandra/astyanax/AstyanaxStoreTest.java -Dcassandra.docker.version=3.0.18'
+    - <<: *FULL_BUILD_JOB
+      env: MODULE='cassandra' ARGS='-Pcassandra3-byteordered -Dtest=**/graphdb/astyanax/* -Dcassandra.docker.version=3.0.18'
+    - <<: *FULL_BUILD_JOB
+      env: MODULE='cassandra' ARGS='-Pcassandra3-murmur -Dtest=**/graphdb/astyanax/* -Dcassandra.docker.version=3.0.18'
+    - <<: *FULL_BUILD_JOB
+      env: MODULE='cql' ARGS=' -Pcassandra3-byteordered -Dcassandra.docker.version=3.0.18'
+    - <<: *FULL_BUILD_JOB
+      env: MODULE='cql' ARGS=' -Pcassandra3-murmur -Dcassandra.docker.version=3.0.18'
+    - <<: *FULL_BUILD_JOB
+      env: MODULE='cql' ARGS=' -Pcassandra3-murmur-ssl -Dcassandra.docker.version=3.0.18 -Dtest=**/diskstorage/cql/CQLStoreTest.java'
+    - <<: *FULL_BUILD_JOB
+      env: MODULE='cql' ARGS=' -Pcassandra3-murmur-client-auth -Dcassandra.docker.version=3.0.18 -Dtest=**/diskstorage/cql/CQLStoreTest.java'
+
+    - stage: test
+      env: COVERITY_ONLY=true
+      install: travis_wait mvn --quiet install -DskipTests=true -Dmaven.javadoc.skip=true --batch-mode --show-version;
+      script:
+        - echo "Building Docker image for Coverity analysis";
+          docker build -t janusgraph/analysis analysis;
+          echo "Running Coverity scan";
+          travis_wait 50 \
+            docker run --rm \
+                -v ${HOME}/.m2:/root/.m2 -v ${PWD}:/opt/janusgraph \
+                -e COVERITY_SCAN_TOKEN="${COVERITY_SCAN_TOKEN}" \
+                -e COVERITY_EMAIL="${COVERITY_EMAIL}" \
+                -i janusgraph/analysis;
+      if: branch = coverity_scan
+
+    - stage: documentation
+      install: docker build -t doc-site:mkdocs -f docs.Dockerfile .
+      script:
+        - echo "Updating configuration markdown";
+          mvn --quiet clean install -DskipTests=true -pl janusgraph-doc -am;
+        - echo "Check for changes in configuration";
+          git diff  --exit-code docs/basics/janusgraph-cfg.md;
+        - docker run --rm -v $PWD:/mkdocs doc-site:mkdocs mkdocs build
+    
+    - stage: deploy
+      install: skip
+      script: skip
+      before_deploy:
+        - echo "Download documentation generator";
+          curl -sfL https://raw.githubusercontent.com/containous/structor/master/godownloader.sh | bash -s -- -b $GOPATH/bin ${STRUCTOR_VERSION}
+        - echo "Build documentation";
+          sudo "$GOPATH/bin/structor" -o janusgraph -r janusgraph \
+            --force-edit-url \
+            --rqts-url="https://raw.githubusercontent.com/janusgraph/janusgraph/master/requirements.txt"
+            --dockerfile-url="https://raw.githubusercontent.com/janusgraph/janusgraph/master/docs.Dockerfile" \
+            --menu.js-url="https://raw.githubusercontent.com/janusgraph/janusgraph/master/docs/theme/structor-menu.js.gotmpl" \
+            --exp-branch=master --debug;
+          sudo chown -R $UID site;
+      deploy:
+        provider: pages
+        repo: JanusGraph/docs.janusgraph.org
+        target_branch: master
+        edge: false
+        github_token: ${GITHUB_TOKEN}
+        local_dir: site
+        skip_cleanup: true
+        on:
+          repo: JanusGraph/janusgraph
+          all_branches: true
+          condition: $TRAVIS_BRANCH =~ ^master$|^v[0-9.]+$
+
+# Syntax and more info: https://docs.travis-ci.com/user/notifications
+notifications:
+  email:
+    - janusgraph-ci@googlegroups.com
