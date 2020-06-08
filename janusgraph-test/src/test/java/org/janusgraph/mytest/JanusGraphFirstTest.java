@@ -15,13 +15,10 @@
 package org.janusgraph.mytest;
 
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversal;
-import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
 import org.apache.tinkerpop.gremlin.structure.Edge;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
-import org.janusgraph.core.JanusGraph;
-import org.janusgraph.core.JanusGraphFactory;
 import org.janusgraph.core.attribute.Geoshape;
-import org.janusgraph.example.GraphOfTheGodsFactory;
+import org.janusgraph.mytest.base.BaseTest;
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -36,59 +33,40 @@ import static org.janusgraph.core.attribute.Geo.geoWithin;
  * @date 2020/6/5
  */
 @Ignore
-public class JanusGraphFirstTest {
+public class JanusGraphFirstTest extends BaseTest {
 
     @Test
-    public void firstTest() throws Exception {
-        JanusGraph graph = null;
-        GraphTraversalSource g = null;
-        try{
-            // 创建图实例，存储使用hbase，索引使用es
-            //graph = JanusGraphFactory
-            //    .open("D:\\code\\janusgraph\\janusgraph-dist\\src\\assembly\\cfilter\\conf\\janusgraph-berkeleyje-es.properties");
-            graph = JanusGraphFactory
-                .open("D:\\code\\janusgraph\\janusgraph-dist\\src\\assembly\\cfilter\\conf\\janusgraph-hbase-es.properties");
+    public void firstTest() {
+        // 使用GraphOfTheGodsFactory加载“The Graph of the Gods”图，这是JanusGraph用于测试自定义的一个图
+        // GraphOfTheGodsFactory.load(graph); // 第一次运行时添加，之后的运行将该语句注释掉，不需要重复的load
 
-            // 使用GraphOfTheGodsFactory加载“The Graph of the Gods”图，这是JanusGraph用于测试自定义的一个图
-            // GraphOfTheGodsFactory.load(graph); // 第一次运行时添加，之后的运行将该语句注释掉，不需要重复的load
+        // 获取图遍历对象实例
+        g = graph.traversal();
+        // 获取属性"name"为"saturn"的节点
+        Vertex saturn = g.V().has("name", "saturn").next();
 
-            // 获取图遍历对象实例
-            g = graph.traversal();
-            // 获取属性"name"为"saturn"的节点
-            Vertex saturn = g.V().has("name", "saturn").next();
+        // 获取上述节点对应的所有属性的kv
+        GraphTraversal<Vertex, Map<Object, Object>> vertexMapGraphTraversal = g.V(saturn).valueMap();
+        List<Map<Object, Object>> saturnProMaps = vertexMapGraphTraversal.toList();
+        for (Map<Object, Object> proMap : saturnProMaps) {
+            proMap.forEach((key,value) -> System.out.println("====="+key + ":" + value));
+        }
 
-            // 获取上述节点对应的所有属性的kv
-            GraphTraversal<Vertex, Map<Object, Object>> vertexMapGraphTraversal = g.V(saturn).valueMap();
-            List<Map<Object, Object>> saturnProMaps = vertexMapGraphTraversal.toList();
-            for (Map<Object, Object> proMap : saturnProMaps) {
-                proMap.forEach((key,value) -> System.out.println("====="+key + ":" + value));
-            }
+        // 获取上述节点的father的father的姓名，也就是grandfather的姓名
+        GraphTraversal<Vertex, Object> values = g.V(saturn).in("father").in("father").values("name");
+        String name = String.valueOf(values.next());
+        System.out.println("=====" + "grandfather name:" + name);
 
-            // 获取上述节点的father的father的姓名，也就是grandfather的姓名
-            GraphTraversal<Vertex, Object> values = g.V(saturn).in("father").in("father").values("name");
-            String name = String.valueOf(values.next());
-            System.out.println("=====" + "grandfather name:" + name);
-
-            // 获取在(latitude:37.97 and long:23.72)50km内的所有节点
-            GraphTraversal<Edge, Edge> place = g.E().has("place", geoWithin(Geoshape.circle(37.97, 23.72, 50)));
-            GraphTraversal<Edge, Map<String, Object>> node = place.as("source")
-                .inV().as("god2")
-                .select("source")
-                .outV().as("god1")
-                .select("god1", "god2").by("name");
-            List<Map<String, Object>> maps = node.toList();
-            for (Map<String, Object> map : maps) {
-                map.forEach((key,value) -> System.out.println("=====" + key + ":" + value));
-            }
-        } catch (Exception e){
-            System.out.println("出现错误！" + e.getMessage());
-        } finally {
-            if (g != null){
-                g.close();
-            }
-            if (graph != null){
-                graph.close();
-            }
+        // 获取在(latitude:37.97 and long:23.72)50km内的所有节点
+        GraphTraversal<Edge, Edge> place = g.E().has("place", geoWithin(Geoshape.circle(37.97, 23.72, 50)));
+        GraphTraversal<Edge, Map<String, Object>> node = place.as("source")
+            .inV().as("god2")
+            .select("source")
+            .outV().as("god1")
+            .select("god1", "god2").by("name");
+        List<Map<String, Object>> maps = node.toList();
+        for (Map<String, Object> map : maps) {
+            map.forEach((key,value) -> System.out.println("=====" + key + ":" + value));
         }
 
     }

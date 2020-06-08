@@ -14,7 +14,15 @@
 
 package org.janusgraph.mytest.dataoperation;
 
+import org.apache.tinkerpop.gremlin.structure.T;
+import org.janusgraph.core.JanusGraphVertex;
+import org.janusgraph.mytest.base.BaseTest;
+import org.junit.Assert;
 import org.junit.Ignore;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 节点操作测试
@@ -22,6 +30,20 @@ import org.junit.Ignore;
  * @date 2020/6/8
  */
 @Ignore
-public class VertexOperationTest {
+public class VertexOperationTest extends BaseTest {
 
+    @Test
+    public void addVertexTest(){
+        List<Object> godProperties = new ArrayList<>();
+        godProperties.add(T.label);
+        godProperties.add("god");
+
+        godProperties.add("name");
+        godProperties.add("liyangyang");
+
+        godProperties.add("age");
+        godProperties.add(18);
+        JanusGraphVertex godVertex = graph.addVertex(godProperties.toArray());
+        Assert.assertNotNull(godVertex);
+    }
 }
