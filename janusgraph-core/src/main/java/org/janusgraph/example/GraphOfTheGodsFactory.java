@@ -75,32 +75,67 @@ public class GraphOfTheGodsFactory {
                     ERR_NO_INDEXING_BACKEND, mixedIndexName);
         }
 
-        //Create Schema
+        //**主要包含6种节点类型：**
+            //* location：位置（sky：天空，sea：海，tartarus：塔耳塔洛斯）
+            //* titan：巨人（saturn：罗马神话中的农神）
+            //* god：神（jupiter，neptune，pluto）
+            //* demigod：半神（hercules）
+            //* human：人类（alcmene）
+            //* monster：怪物（nemean，hydra，cerberus）
+
+        //**主要包含6中边类型：**
+            //* father：父亲
+            //* mother：母亲
+            //* brother：兄弟
+            //* battled：战斗
+            //* lives：生活在
+            //* pet：宠物
+
+        // Create Schema
         JanusGraphManagement management = graph.openManagement();
+
+        // ===创建name属性； String、唯一CompositeIndex、锁机制保证name的强一致性
         final PropertyKey name = management.makePropertyKey("name").dataType(String.class).make();
         JanusGraphManagement.IndexBuilder nameIndexBuilder = management.buildIndex("name", Vertex.class).addKey(name);
         if (uniqueNameCompositeIndex)
             nameIndexBuilder.unique();
         JanusGraphIndex nameIndex = nameIndexBuilder.buildCompositeIndex();
+        // 此处的LOCK，在name索引上添加了LOCK标识，标识这在并发修改相同的name属性时，必须通过锁机制（本地锁+分布式锁）保证并发修改；
         management.setConsistency(nameIndex, ConsistencyModifier.LOCK);
+
+        // ===创建age属性；Integer、mixed index
         final PropertyKey age = management.makePropertyKey("age").dataType(Integer.class).make();
         if (null != mixedIndexName)
             management.buildIndex("vertices", Vertex.class).addKey(age).buildMixedIndex(mixedIndexName);
 
+        // ===创建time属性
         final PropertyKey time = management.makePropertyKey("time").dataType(Integer.class).make();
+        // ===创建reason属性
         final PropertyKey reason = management.makePropertyKey("reason").dataType(String.class).make();
+        // ===创建place属性
         final PropertyKey place = management.makePropertyKey("place").dataType(Geoshape.class).make();
+        // 为reason 和 place属性创建mixed index索引edges
         if (null != mixedIndexName)
             management.buildIndex("edges", Edge.class).addKey(reason).addKey(place).buildMixedIndex(mixedIndexName);
 
+        // 创建边类型：father， many to one
         management.makeEdgeLabel("father").multiplicity(Multiplicity.MANY2ONE).make();
+        // 创建边类型：mother， many to one
         management.makeEdgeLabel("mother").multiplicity(Multiplicity.MANY2ONE).make();
+        // 创建边类型：battled， 签名密匙为time:争斗次数，
         EdgeLabel battled = management.makeEdgeLabel("battled").signature(time).make();
+        // 为battled边创建一个以顶点为中心的 中心索引（vertex-centric index），索引属性time； 双向索引，可以从 神->怪物 也可以 怪物->神
+        // 将查询节点对应的 battled 边时，可以使用这个vertex-centric索引，索引属性为 time；
+        // vertex-centric index为了解决大节点问题，一个节点存在过多的边！
         management.buildEdgeIndex(battled, "battlesByTime", Direction.BOTH, Order.desc, time);
+        // 创建边类型：lives，签名密匙为reason
         management.makeEdgeLabel("lives").signature(reason).make();
+        // 创建边类型：pet
         management.makeEdgeLabel("pet").make();
+        // 创建边类型：brother
         management.makeEdgeLabel("brother").make();
 
+        // 创建节点label
         management.makeVertexLabel("titan").make();
         management.makeVertexLabel("location").make();
         management.makeVertexLabel("god").make();
@@ -108,11 +143,13 @@ public class GraphOfTheGodsFactory {
         management.makeVertexLabel("human").make();
         management.makeVertexLabel("monster").make();
 
+        // 提交！！ 上述schema的创建！
         management.commit();
 
+        // ======= 开始插入数据！=======
         JanusGraphTransaction tx = graph.newTransaction();
-        // vertices
 
+        // 插入节点
         Vertex saturn = tx.addVertex(T.label, "titan", "name", "saturn", "age", 10000);
         Vertex sky = tx.addVertex(T.label, "location", "name", "sky");
         Vertex sea = tx.addVertex(T.label, "location", "name", "sea");
@@ -126,8 +163,7 @@ public class GraphOfTheGodsFactory {
         Vertex cerberus = tx.addVertex(T.label, "monster", "name", "cerberus");
         Vertex tartarus = tx.addVertex(T.label, "location", "name", "tartarus");
 
-        // edges
-
+        // 插入边数据
         jupiter.addEdge("father", saturn);
         jupiter.addEdge("lives", sky, "reason", "loves fresh breezes");
         jupiter.addEdge("brother", neptune);
@@ -150,7 +186,7 @@ public class GraphOfTheGodsFactory {
 
         cerberus.addEdge("lives", tartarus);
 
-        // commit the transaction to disk
+        // 提交事务，持久化提交的数据到磁盘
         tx.commit();
     }
 
