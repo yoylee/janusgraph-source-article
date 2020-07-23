@@ -511,14 +511,14 @@ public class StandardJanusGraphTx extends JanusGraphBlueprintsTransaction implem
         if (vertexId != null) {
             vertex.setId(vertexId);
         } else if (config.hasAssignIDsImmediately() || label.isPartitioned()) {
-            graph.assignID(vertex,label);
+            graph.assignID(vertex,label);  // 为节点分配正式的节点id！
         }
-        addProperty(vertex, BaseKey.VertexExists, Boolean.TRUE);
-        if (label!=BaseVertexLabel.DEFAULT_VERTEXLABEL) { //Add label
+        addProperty(vertex, BaseKey.VertexExists, Boolean.TRUE); // 默认：添加节点存在属性
+        if (label!=BaseVertexLabel.DEFAULT_VERTEXLABEL) { //Add label 默认：添加节点和其对应label的边
             Preconditions.checkArgument(label instanceof VertexLabelVertex);
             addEdge(vertex, label, BaseLabel.VertexLabelEdge);
         }
-        vertexCache.add(vertex, vertex.longId());
+        vertexCache.add(vertex, vertex.longId()); // 加入到对应的插入缓存中
         return vertex;
 
     }
@@ -1415,12 +1415,14 @@ public class StandardJanusGraphTx extends JanusGraphBlueprintsTransaction implem
 
     @Override
     public synchronized void commit() {
+        // 检查当前事务是否已经 begin()
         Preconditions.checkArgument(isOpen(), "The transaction has already been closed");
         boolean success = false;
         if (null != config.getGroupName()) {
             MetricManager.INSTANCE.getCounter(config.getGroupName(), "tx", "commit").inc();
         }
         try {
+            // 判断当前准备提交的事务中，是否包含数据的更改操作，增、删、改
             if (hasModifications()) {
                 graph.commit(addedRelations.getAll(), deletedRelations.values(), this);
             } else {
@@ -1428,13 +1430,17 @@ public class StandardJanusGraphTx extends JanusGraphBlueprintsTransaction implem
             }
             success = true;
         } catch (Exception e) {
+            // 持久化数据失败，捕获异常
             try {
+                // 回滚
                 txHandle.rollback();
             } catch (BackendException e1) {
                 throw new JanusGraphException("Could not rollback after a failed commit", e);
             }
+            // 抛出最上层异常
             throw new JanusGraphException("Could not commit transaction due to exception during persistence", e);
         } finally {
+            // 关闭事务
             releaseTransaction();
             if (null != config.getGroupName() && !success) {
                 MetricManager.INSTANCE.getCounter(config.getGroupName(), "tx", "commit.exceptions").inc();

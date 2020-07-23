@@ -735,7 +735,7 @@ public class ElasticSearchIndex implements IndexProvider {
             for (final Map.Entry<String, Map<String, IndexMutation>> stores : mutations.entrySet()) {
                 final List<ElasticSearchMutation> requestByStore = new ArrayList<>();
                 final String storeName = stores.getKey();
-                final String indexStoreName = getIndexStoreName(storeName);
+                final String indexStoreName = getIndexStoreName(storeName); // 此处获取es的索引库名称： janusgraph+_+storName
                 for (final Map.Entry<String, IndexMutation> entry : stores.getValue().entrySet()) {
                     final String documentId = entry.getKey();
                     final IndexMutation mutation = entry.getValue();
@@ -764,7 +764,7 @@ public class ElasticSearchIndex implements IndexProvider {
                             final Map<String, Object> source = getNewDocument(mutation.getAdditions(),
                                     information.get(storeName));
                             requestByStore.add(ElasticSearchMutation.createIndexRequest(indexStoreName, storeName,
-                                    documentId, source));
+                                    documentId, source)); // 组装插入es中的数据model
                         } else {
                             final Map upsert;
                             if (!mutation.hasDeletions()) {
@@ -799,7 +799,7 @@ public class ElasticSearchIndex implements IndexProvider {
                 }
             }
             if (!requests.isEmpty()) {
-                client.bulkRequest(requests, null);
+                client.bulkRequest(requests, null); // 批量插入到es中
             }
         } catch (final Exception e) {
             log.error("Failed to execute bulk Elasticsearch mutation", e);

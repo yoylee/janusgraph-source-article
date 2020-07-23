@@ -413,6 +413,7 @@ public class ConsistentKeyLocker extends AbstractLocker<ConsistentKeyLockStatus>
     protected void checkSingleLock(final KeyColumn kc, final ConsistentKeyLockStatus ls,
                                    final StoreTransaction tx) throws BackendException, InterruptedException {
 
+        // 检查是否被检查过
         if (ls.isChecked())
             return;
 
@@ -423,8 +424,10 @@ public class ConsistentKeyLocker extends AbstractLocker<ConsistentKeyLockStatus>
         // Slice the store
         KeySliceQuery ksq = new KeySliceQuery(serializer.toLockKey(kc.getKey(), kc.getColumn()), LOCK_COL_START,
             LOCK_COL_END);
+        // 此处从hbase中查询出锁定的行的所有列！ 默认查询重试次数3
         List<Entry> claimEntries = getSliceWithRetries(ksq, tx);
 
+        // 从每个返回条目的列中提取timestamp和rid，然后过滤出带有过期时间戳的timestamp对象
         // Extract timestamp and rid from the column in each returned Entry...
         final Iterable<TimestampRid> iterable = Iterables.transform(claimEntries,
             e -> serializer.fromLockColumn(e.getColumnAs(StaticBuffer.STATIC_FACTORY), times));
@@ -448,10 +451,13 @@ public class ConsistentKeyLocker extends AbstractLocker<ConsistentKeyLockStatus>
                 }
                 continue;
             }
+            // 将还未过期的锁记录存储到一个集合中
             unexpiredTRs.add(tr);
         }
-
+        // 判断当前tx是否成功持有锁！ 如果我们插入的列是读取的第一个列，或者前面的列只包含我们自己的rid（因为我们是在第一部分的前提下获取的锁，第一部分我们成功获取了基于当前进程的锁，所以如果rid相同，代表着我们也成功获取到了当前的分布式锁），那么我们持有锁。否则，另一个进程持有该锁，我们无法获得锁
+        // 如果，获取锁失败，抛出TemporaryLockingException异常！！！！ 抛出到顶层的mutator.commitStorage()处，最终导入失败进行事务回滚等操作
         checkSeniority(kc, ls, unexpiredTRs);
+        // 如果上述步骤未抛出异常，则标识当前的tx已经成功获取锁！
         ls.setChecked();
     }
 
@@ -461,6 +467,7 @@ public class ConsistentKeyLocker extends AbstractLocker<ConsistentKeyLockStatus>
             // TODO either make this like writeLock so that it handles all Throwable types (and pull that logic out
             // into a shared method) or make writeLock like this in that it only handles Temporary/PermanentSE
             try {
+                // 此处从hbase中查询出锁定的行的所有列！ 默认查询重试次数3
                 return store.getSlice(ksq, tx);
             } catch (PermanentBackendException e) {
                 log.error("Failed to check locks", e);
@@ -481,6 +488,7 @@ public class ConsistentKeyLocker extends AbstractLocker<ConsistentKeyLockStatus>
         for (TimestampRid tr : claimTRs) {
             trCount++;
 
+            //
             if (!rid.equals(tr.getRid())) {
                 final String msg = "Lock on " + target + " already held by " + tr.getRid() + " (we are " + rid + ")";
                 log.debug(msg);
@@ -531,7 +539,9 @@ public class ConsistentKeyLocker extends AbstractLocker<ConsistentKeyLockStatus>
 
     @Override
     protected void deleteSingleLock(KeyColumn kc, ConsistentKeyLockStatus ls, StoreTransaction tx) {
+        // 组装要删除的数据
         List<StaticBuffer> deletions = ImmutableList.of(serializer.toLockCol(ls.getWriteTimestamp(), rid, times));
+        // 删除对应的数据，重试次数3次
         for (int i = 0; i < lockRetryCount; i++) {
             try {
                 StoreTransaction newTx = overrideTimestamp(tx, times.getTime());

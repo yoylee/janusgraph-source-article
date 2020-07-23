@@ -69,6 +69,7 @@ public class ExpectedValueCheckingStoreManager extends KCVSManagerProxy {
     @Override
     public void mutateMany(Map<String, Map<StaticBuffer, KCVMutation>> mutations, StoreTransaction txh) throws BackendException {
         ExpectedValueCheckingTransaction etx = (ExpectedValueCheckingTransaction)txh;
+        // 此处调用了checkSingleLock，判断分布式锁的获取结果
         boolean hasAtLeastOneLock = etx.prepareForMutations();
         if (hasAtLeastOneLock) {
             // Force all mutations on this transaction to use strong consistency

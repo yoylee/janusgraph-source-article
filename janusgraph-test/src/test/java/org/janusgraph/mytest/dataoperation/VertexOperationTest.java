@@ -14,7 +14,10 @@
 
 package org.janusgraph.mytest.dataoperation;
 
+import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversal;
 import org.apache.tinkerpop.gremlin.structure.T;
+import org.apache.tinkerpop.gremlin.structure.Vertex;
+import org.apache.tinkerpop.gremlin.structure.VertexProperty;
 import org.janusgraph.core.JanusGraphVertex;
 import org.janusgraph.mytest.base.BaseTest;
 import org.junit.Assert;
@@ -22,7 +25,11 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 /**
  * 节点操作测试
@@ -39,11 +46,58 @@ public class VertexOperationTest extends BaseTest {
         godProperties.add("god");
 
         godProperties.add("name");
-        godProperties.add("liyangyang");
+        godProperties.add("lyy");
 
         godProperties.add("age");
         godProperties.add(18);
+
         JanusGraphVertex godVertex = graph.addVertex(godProperties.toArray());
-        Assert.assertNotNull(godVertex);
+
+        assertNotNull(godVertex);
+    }
+
+    @Test
+    public void updateVertexTest(){
+        GraphTraversal<Vertex, Vertex> has = graph.traversal().V().has("name", "liyangyang26");
+
+        assertTrue(has.hasNext());
+
+        Vertex vertex = has.toList().get(0);
+        Iterator<VertexProperty<Object>> properties = vertex.properties("age", "name", "type");
+        while (properties.hasNext()){
+            System.out.println(properties.next().value());
+        }
+
+        assertNotNull(vertex);
+        vertex.property("age","12");
+        vertex.property("name","liyangyang27");
+        vertex.property("type","human7");
+
+        System.out.println();
+    }
+
+
+    @Test
+    public void deleteVertexTest(){
+
+    }
+
+
+    // 用于测试分布式锁
+    @Test
+    public void addVertexTest2(){
+        List<Object> godProperties = new ArrayList<>();
+        godProperties.add(T.label);
+        godProperties.add("god");
+
+        godProperties.add("name");
+        godProperties.add("liyangyang10");
+
+        godProperties.add("age");
+        godProperties.add(18);
+
+        JanusGraphVertex godVertex = graph.addVertex(godProperties.toArray());
+
+        assertNotNull(godVertex);
     }
 }

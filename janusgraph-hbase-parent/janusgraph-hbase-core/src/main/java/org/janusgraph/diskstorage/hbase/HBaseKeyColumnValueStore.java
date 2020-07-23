@@ -89,6 +89,7 @@ public class HBaseKeyColumnValueStore implements KeyColumnValueStore {
 
     @Override
     public EntryList getSlice(KeySliceQuery query, StoreTransaction txh) throws BackendException {
+        // 此处从hbase中查询出锁定的行的所有列！ 默认查询重试次数3
         Map<StaticBuffer, EntryList> result = getHelper(Collections.singletonList(query.getKey()), getFilter(query));
         return Iterables.getOnlyElement(result.values(), EntryList.EMPTY_LIST);
     }

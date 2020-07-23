@@ -112,14 +112,14 @@ public abstract class JanusGraphBlueprintsTransaction implements JanusGraphTrans
                 if (labelValue instanceof String) ElementHelper.validateLabel((String) labelValue);
             }
         }
-        VertexLabel label = BaseVertexLabel.DEFAULT_VERTEXLABEL;
-        if (labelValue!=null) {
+        VertexLabel label = BaseVertexLabel.DEFAULT_VERTEXLABEL; // 赋值节点的默认label：vertex
+        if (labelValue!=null) { // 如果给定的参数中包含label,则使用给定的label
             label = (labelValue instanceof VertexLabel)?(VertexLabel)labelValue:getOrCreateVertexLabel((String) labelValue);
         }
 
         final Long id = ElementHelper.getIdValue(keyValues).map(Number.class::cast).map(Number::longValue).orElse(null);
-        final JanusGraphVertex vertex = addVertex(id, label);
-        org.janusgraph.graphdb.util.ElementHelper.attachProperties(vertex, keyValues);
+        final JanusGraphVertex vertex = addVertex(id, label); // 分配临时节点id（如果配置了可以立即分配节点id的话，会分配正式的节点id），并将 节点存在属性 和 节点和label的边 两种默认添加的关系
+        org.janusgraph.graphdb.util.ElementHelper.attachProperties(vertex, keyValues); // 处理所有自定义的属性
         return vertex;
     }
 

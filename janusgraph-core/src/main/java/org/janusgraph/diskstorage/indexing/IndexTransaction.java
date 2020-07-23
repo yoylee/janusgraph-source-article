@@ -77,7 +77,7 @@ public class IndexTransaction implements BaseTransaction, LoggableTransaction {
 
     private IndexMutation getIndexMutation(String store, String documentId, boolean isNew, boolean isDeleted) {
         final Map<String, IndexMutation> storeMutations = mutations.computeIfAbsent(store, k -> new HashMap<>(DEFAULT_INNER_MAP_SIZE));
-        IndexMutation m = storeMutations.get(documentId);
+        IndexMutation m = storeMutations.get(documentId); // 根据索引数据的 文档id查询出对应的 数据
         if (m==null) {
             m = new IndexMutation(keyInformation.get(store), isNew, isDeleted);
             storeMutations.put(documentId, m);
@@ -130,8 +130,8 @@ public class IndexTransaction implements BaseTransaction, LoggableTransaction {
 
     @Override
     public void commit() throws BackendException {
-        flushInternal();
-        indexTx.commit();
+        flushInternal(); // 此处已经将es的mixed index数据插入到es中
+        indexTx.commit(); // 此处调用DefaultTransaction中的commit()方法，为 空实现；无任何作用！
     }
 
     @Override

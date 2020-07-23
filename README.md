@@ -1,5 +1,7 @@
 本项目，用于对janusgraph源码分析过程中的过程提交记录，欢迎star
 
+[![JanusGraph logo](janusgraph.png)](https://janusgraph.org/)
+
 JanusGraph is a highly scalable [graph database](https://en.wikipedia.org/wiki/Graph_database)
 optimized for storing and querying large graphs with billions of vertices and edges
 distributed across a multi-machine cluster. JanusGraph is a transactional database that

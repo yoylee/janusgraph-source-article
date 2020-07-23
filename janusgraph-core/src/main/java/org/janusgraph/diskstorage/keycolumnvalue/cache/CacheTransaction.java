@@ -91,6 +91,7 @@ public class CacheTransaction implements StoreTransaction, LoggableTransaction {
         BackendOperation.execute(new Callable<Boolean>() {
             @Override
             public Boolean call() throws Exception {
+                // 此方法内调用checkSingleLock 检查分布式锁的获取结果
                 manager.mutateMany(subMutations, tx);
                 return true;
             }
@@ -136,6 +137,7 @@ public class CacheTransaction implements StoreTransaction, LoggableTransaction {
                     }
                 }
             }
+            // 此方法内调用checkSingleLock 检查分布式锁的获取结果
             if (numSubMutations>0) persist(subMutations);
 
 
@@ -193,6 +195,7 @@ public class CacheTransaction implements StoreTransaction, LoggableTransaction {
 
     @Override
     public void commit() throws BackendException {
+        // 此方法内调用checkSingleLock 检查分布式锁的获取结果
         flushInternal();
         tx.commit();
     }

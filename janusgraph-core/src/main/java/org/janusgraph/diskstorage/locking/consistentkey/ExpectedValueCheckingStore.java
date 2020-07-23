@@ -71,7 +71,7 @@ public class ExpectedValueCheckingStore extends KCVSProxy {
     @Override
     public void mutate(StaticBuffer key, List<Entry> additions, List<StaticBuffer> deletions, StoreTransaction txh) throws BackendException {
         ExpectedValueCheckingTransaction etx = (ExpectedValueCheckingTransaction)txh;
-        boolean hasAtLeastOneLock = etx.prepareForMutations();
+        boolean hasAtLeastOneLock = etx.prepareForMutations(); // 此处调用了checkSingleLock，判断分布式锁的获取结果
         if (hasAtLeastOneLock) {
             // Force all mutations on this transaction to use strong consistency
             store.mutate(key, additions, deletions, getConsistentTx(txh));
@@ -94,15 +94,26 @@ public class ExpectedValueCheckingStore extends KCVSProxy {
      */
     @Override
     public void acquireLock(StaticBuffer key, StaticBuffer column, StaticBuffer expectedValue, StoreTransaction txh) throws BackendException {
+        // locker是一个一致性key锁对象
         if (locker != null) {
+            // 获取当前事务对象
             ExpectedValueCheckingTransaction tx = (ExpectedValueCheckingTransaction) txh;
+            // 判断：当前的获取锁操作是否当前事务的操作中存在增删改的操作
             if (tx.isMutationStarted())
                 throw new PermanentLockingException("Attempted to obtain a lock after mutations had been persisted");
+            // 使用key+column组装为lockID，供下述加锁使用！！！！！
             KeyColumn lockID = new KeyColumn(key, column);
             log.debug("Attempting to acquireLock on {} ev={}", lockID, expectedValue);
+            // 获取本地当前jvm进程中的写锁（看下述的 1：写锁获取分析）
+            // （此处的获取锁只是将对应的KLV存储到Hbase中！存储成功并不代表获取锁成功）
+            // 1. 获取成功（等同于存储成功）则继续执行
+            // 2. 获取失败（等同于存储失败），会抛出异常，抛出到最上层，打印错误日志“Could not commit transaction ["+transactionId+"] due to exception” 并抛出对应的异常，本次插入数据结束
             locker.writeLock(lockID, tx.getConsistentTx());
+            // 执行前提：上述获取锁成功！
+            // 存储期望值，此处为了实现当相同的key + value + tx多个加锁时，只处理第一个
             tx.storeExpectedValue(this, lockID, expectedValue);
         } else {
+            // locker为空情况下，直接抛出一个运行时异常，终止程序
             store.acquireLock(key, column, expectedValue, unwrapTx(txh));
         }
     }

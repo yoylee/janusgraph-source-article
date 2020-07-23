@@ -14,7 +14,12 @@
 
 package org.janusgraph.mytest.dataoperation;
 
+import org.apache.tinkerpop.gremlin.structure.Edge;
+import org.apache.tinkerpop.gremlin.structure.Vertex;
+import org.janusgraph.mytest.base.BaseTest;
+import org.junit.Assert;
 import org.junit.Ignore;
+import org.junit.Test;
 
 /**
  * 边操作测试
@@ -22,6 +27,19 @@ import org.junit.Ignore;
  * @date 2020/6/8
  */
 @Ignore
-public class EdgeOperationTest {
+public class EdgeOperationTest extends BaseTest {
 
+    @Test
+    public void addEdgeTest(){
+        Vertex sourceVertex = graph.traversal().V().has("name", "liyangyang5").next();
+        Assert.assertNotNull(sourceVertex);
+
+        Vertex targetVertex = graph.traversal().V().has("name", "liyangyang6").next();
+        Assert.assertNotNull(targetVertex);
+
+        Edge edge = sourceVertex.addEdge("lives", targetVertex, "reason", "his love you baby~", "edge_no_index", "test_value");
+        Edge edge2 = sourceVertex.addEdge("father", targetVertex, "edge_no_index", "test_value");
+        Assert.assertNotNull(edge);
+        Assert.assertNotNull(edge2);
+    }
 }

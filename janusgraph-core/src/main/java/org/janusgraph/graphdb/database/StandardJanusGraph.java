@@ -538,6 +538,7 @@ public class StandardJanusGraph extends JanusGraphBlueprintsGraph {
         ListMultimap<InternalVertex, InternalRelation> mutatedProperties = ArrayListMultimap.create();
         List<IndexSerializer.IndexUpdate> indexUpdates = Lists.newArrayList();
         //1) Collect deleted edges and their index updates and acquire edge locks
+        // 收集已删除的边及其索引更新 并尝试获取边锁（此处的获取锁只是将对应的KLV存储到Hbase中！存储成功并不代表获取锁成功）
         for (InternalRelation del : Iterables.filter(deletedRelations,filter)) {
             Preconditions.checkArgument(del.isRemoved());
             for (int pos = 0; pos < del.getLen(); pos++) {
@@ -555,6 +556,7 @@ public class StandardJanusGraph extends JanusGraphBlueprintsGraph {
         }
 
         //2) Collect added edges and their index updates and acquire edge locks
+        // 收集添加的边及其索引更新 并获取边锁（此处的获取锁只是将对应的KLV存储到Hbase中！存储成功并不代表获取锁成功）
         for (InternalRelation add : Iterables.filter(addedRelations,filter)) {
             Preconditions.checkArgument(add.isNew());
 
@@ -564,35 +566,49 @@ public class StandardJanusGraph extends JanusGraphBlueprintsGraph {
                     if (add.isProperty()) mutatedProperties.put(vertex,add);
                     mutations.put(vertex.longId(), add);
                 }
+                // 判定
+                // 1. 节点不为新节点
+                // 2. 当前存储后端支持锁
+                // 3. 当前边关系包含唯一索引 或者 当前边关系为simple类型，即两节点之间只能有同一个类型的一个边
                 if (!vertex.isNew() && acquireLock(add,pos,acquireLocks)) {
                     Entry entry = edgeSerializer.writeRelation(add, pos, tx);
                     mutator.acquireEdgeLock(idManager.getKey(vertex.longId()), entry.getColumn());
                 }
             }
+            // 获取边包含的属性 在节点插入时没有作用，插入边数据时，获取边上的属性对应的索引； 只有edge操作中包含边属性，并且包含索引！
             indexUpdates.addAll(indexSerializer.getIndexUpdates(add));
         }
 
         //3) Collect all index update for vertices
+        // 收集节点的所有索引更新、操作节点时才有作用； 针对于插入edge的操作，不涉及此处
         for (InternalVertex v : mutatedProperties.keySet()) {
             indexUpdates.addAll(indexSerializer.getIndexUpdates(v,mutatedProperties.get(v)));
         }
         //4) Acquire index locks (deletions first)
+        // 获取所有删除更新的 index锁（此处的获取锁只是将对应的KLV存储到Hbase中！存储成功并不代表获取锁成功）
         for (IndexSerializer.IndexUpdate update : indexUpdates) {
             if (!update.isCompositeIndex() || !update.isDeletion()) continue;
             CompositeIndexType iIndex = (CompositeIndexType) update.getIndex();
+            // 判断1. 当前索引需要获取锁
+            // 2. 当前索引的属性Cardinality不为List类型
             if (acquireLock(iIndex,acquireLocks)) {
                 mutator.acquireIndexLock((StaticBuffer)update.getKey(), (Entry)update.getEntry());
             }
         }
+        // 获取所有增加更新的 index锁
         for (IndexSerializer.IndexUpdate update : indexUpdates) {
             if (!update.isCompositeIndex() || !update.isAddition()) continue;
             CompositeIndexType iIndex = (CompositeIndexType) update.getIndex();
+            // 判断1. 当前索引需要获取锁
+            // 2. 当前索引的属性Cardinality不为List类型
             if (acquireLock(iIndex,acquireLocks)) {
+                // ！！！！ 获取索引锁！
                 mutator.acquireIndexLock((StaticBuffer)update.getKey(), ((Entry)update.getEntry()).getColumn());
             }
         }
 
         //5) Add relation mutations
+        // 添加关系的更新  在持久化数据时， 节点包含的属性 节点-边 都是以relation的形式存在
         for (Long vertexId : mutations.keySet()) {
             Preconditions.checkArgument(vertexId > 0, "Vertex has no id: %s", vertexId);
             final List<InternalRelation> edges = mutations.get(vertexId);
@@ -629,6 +645,8 @@ public class StandardJanusGraph extends JanusGraphBlueprintsGraph {
         }
 
         //6) Add index updates
+        // 添加索引的更新
+        // 标识是否存在外部类似于es提供的mixed index索引类型！ 要单独处理！
         boolean has2iMods = false;
         for (IndexSerializer.IndexUpdate indexUpdate : indexUpdates) {
             assert indexUpdate.isAddition() || indexUpdate.isDeletion();
@@ -641,10 +659,10 @@ public class StandardJanusGraph extends JanusGraphBlueprintsGraph {
             } else {
                 final IndexSerializer.IndexUpdate<String,IndexEntry> update = indexUpdate;
                 has2iMods = true;
-                IndexTransaction itx = mutator.getIndexTransaction(update.getIndex().getBackingIndexName());
-                String indexStore = ((MixedIndexType)update.getIndex()).getStoreName();
+                IndexTransaction itx = mutator.getIndexTransaction(update.getIndex().getBackingIndexName()); // 获取外部索引存储事务对象，我们使用的是es，则此处获取es的事务对象
+                String indexStore = ((MixedIndexType)update.getIndex()).getStoreName(); // 获取当前索引的存储类型，在es中边属性"lives"的mixed index索引为“edges”，节点属性"age"属性的mixed index索引类型为“vertices”
                 if (update.isAddition())
-                    itx.add(indexStore, update.getKey(), update.getEntry(), update.getElement().isNew());
+                    itx.add(indexStore, update.getKey(), update.getEntry(), update.getElement().isNew()); // update.getKey()作为文档id；entry中的属性名称作为es索引中“字段”；entry中的属性值作为es中索引的“字段值”；
                 else
                     itx.delete(indexStore,update.getKey(),update.getEntry().field,update.getEntry().value,update.getElement().isRemoved());
             }
@@ -664,18 +682,26 @@ public class StandardJanusGraph extends JanusGraphBlueprintsGraph {
         if (addedRelations.isEmpty() && deletedRelations.isEmpty()) return;
         //1. Finalize transaction
         log.debug("Saving transaction. Added {}, removed {}", addedRelations.size(), deletedRelations.size());
-        if (!tx.getConfiguration().hasCommitTime()) tx.getConfiguration().setCommitTime(times.getTime());
+        if (!tx.getConfiguration().hasCommitTime())
+            tx.getConfiguration().setCommitTime(times.getTime());
+        // 获取配置的事务提交时间 ？？
         final Instant txTimestamp = tx.getConfiguration().getCommitTime();
+        // 图实例维度，并发获取事务id，通过AtomicLong实现
         final long transactionId = txCounter.incrementAndGet();
 
-        //2. Assign JanusGraphVertex IDs
+        //2. Assign JanusGraphVertex IDs 分配vertex id
         if (!tx.getConfiguration().hasAssignIDsImmediately())
             idAssigner.assignIDs(addedRelations);
 
         //3. Commit
+        // 获取底层存储的事务对象
         BackendTransaction mutator = tx.getTxHandle();
+        // 判断是否获取锁，默认为true
         final boolean acquireLocks = tx.getConfiguration().hasAcquireLocks();
+        // 是否存在事务隔离
         final boolean hasTxIsolation = backend.getStoreFeatures().hasTxIsolation();
+
+        // 日志打印相关
         final boolean logTransaction = config.hasLogTransactions() && !tx.getConfiguration().hasEnabledBatchLoading();
         final KCVSLog txLog = logTransaction?backend.getSystemTxLog():null;
         final TransactionLogHeader txLogHeader = new TransactionLogHeader(transactionId,txTimestamp, times);
@@ -683,6 +709,7 @@ public class StandardJanusGraph extends JanusGraphBlueprintsGraph {
 
         try {
             //3.1 Log transaction (write-ahead log) if enabled
+            // 日志相关处理
             if (logTransaction) {
                 //[FAILURE] Inability to log transaction fails the transaction by escalation since it's likely due to unavailability of primary
                 //storage backend.
@@ -696,7 +723,6 @@ public class StandardJanusGraph extends JanusGraphBlueprintsGraph {
                     || !Iterables.isEmpty(Iterables.filter(addedRelations,SCHEMA_FILTER));
             Preconditions.checkArgument(!hasSchemaElements || (!tx.getConfiguration().hasEnabledBatchLoading() && acquireLocks),
                     "Attempting to create schema elements in inconsistent state");
-
             if (hasSchemaElements && !hasTxIsolation) {
                 /*
                  * On storage without transactional isolation, create separate
@@ -728,7 +754,11 @@ public class StandardJanusGraph extends JanusGraphBlueprintsGraph {
 
             //[FAILURE] Exceptions during preparation here cause the entire transaction to fail on transactional systems
             //or just the non-system part on others. Nothing has been persisted unless batch-loading
+            // 准备提交的数据（组装hbase数据、获取分布式锁等），包含两种情况
+            // 1. 抛出异常，则当前事务直接失败，回滚; 批量导入的话，只是当前插入的数据失败，其他的不会回滚
+            // 2. 未抛出异常，则组装数据成功
             commitSummary = prepareCommit(addedRelations,deletedRelations, hasTxIsolation? NO_FILTER : NO_SCHEMA_FILTER, mutator, tx, acquireLocks);
+            // 上述组装包含更改数据，则执行下述
             if (commitSummary.hasModifications) {
                 String logTxIdentifier = tx.getConfiguration().getLogIdentifier();
                 boolean hasSecondaryPersistence = logTxIdentifier!=null || commitSummary.has2iModifications;
@@ -744,6 +774,8 @@ public class StandardJanusGraph extends JanusGraphBlueprintsGraph {
                 }
 
                 try {
+                    // 调用底层使用的存储事务对象，提交数据，持久化数据
+                    // ！！！该方法内调用了checkSingleLock，判断分布式锁的获取结果，锁获取成功的话，则持久化，获取失败则返回！
                     mutator.commitStorage();
                 } catch (Throwable e) {
                     //[FAILURE] If primary storage persistence fails abort directly (only schema could have been persisted)
@@ -751,6 +783,8 @@ public class StandardJanusGraph extends JanusGraphBlueprintsGraph {
                     throw e;
                 }
 
+                // 次要持久性
+                // 只有在包含非 composite index组合索引的情况下存在； 处理外部mixed index索引的情况！
                 if (hasSecondaryPersistence) {
                     LogTxStatus status = LogTxStatus.SECONDARY_SUCCESS;
                     Map<String,Throwable> indexFailures = ImmutableMap.of();
@@ -805,13 +839,17 @@ public class StandardJanusGraph extends JanusGraphBlueprintsGraph {
                 mutator.commit();
             }
         } catch (Throwable e) {
+            // 如果在获取分布式锁时失败 或者 发生运行时异常，则会抛出异常到这一层，被此处捕获
+            // 打印错误日志
             log.error("Could not commit transaction ["+transactionId+"] due to exception",e);
             try {
                 //Clean up any left-over transaction handles
+                // 事务回滚
                 mutator.rollback();
             } catch (Throwable e2) {
                 log.error("Could not roll-back transaction ["+transactionId+"] after failure due to exception",e2);
             }
+            // 抛出对应的异常
             if (e instanceof RuntimeException) throw (RuntimeException)e;
             else throw new JanusGraphException("Unexpected exception",e);
         }

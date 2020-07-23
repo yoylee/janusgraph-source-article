@@ -151,6 +151,7 @@ public class ExpectedValueCheckingTransaction implements StoreTransaction {
      */
     boolean prepareForMutations() throws BackendException {
         if (!isMutationStarted()) {
+            // 此处调用了checkSingleLock，判断分布式锁的获取结果
             checkAllLocks();
             checkAllExpectedValues();
             mutationStarted();
@@ -172,6 +173,7 @@ public class ExpectedValueCheckingTransaction implements StoreTransaction {
             // Ignore locks on stores without a locker
             if (null == locker)
                 continue;
+            // 此处调用了checkSingleLock，判断分布式锁的获取结果
             locker.checkLocks(lt);
         }
     }

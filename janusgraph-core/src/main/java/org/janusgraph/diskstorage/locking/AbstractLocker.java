@@ -293,28 +293,41 @@ public abstract class AbstractLocker<S extends LockStatus> implements Locker {
             MetricManager.INSTANCE.getCounter(tx.getConfiguration().getGroupName(), M_LOCKS, M_WRITE, M_CALLS).inc();
         }
 
+        // 判断当前事务是否在图实例的维度 已经占据了lockID的锁
+        // 此处的lockState在一个事务成功获取本地锁+分布式锁后，以事务为key、value为map，其中key为lockID，value为加锁状态（开始时间、过期时间等）
         if (lockState.has(tx, lockID)) {
             log.debug("Transaction {} already wrote lock on {}", tx, lockID);
             return;
         }
 
+        // 当前事务没有占据lockID对应的锁
+        // 进行(lockLocally(lockID, tx） 本地加锁锁定操作，
         if (lockLocally(lockID, tx)) {
             boolean ok = false;
             try {
+                // 在本地锁获取成功的前提下：
+                // 尝试获取基于Hbase实现的分布式锁；
+                // （此处的获取锁只是将对应的KLV存储到Hbase中！存储成功并不代表获取锁成功）
                 S stat = writeSingleLock(lockID, tx);
+                // 获取锁分布式锁成功后，更新本地锁的过期时间为分布式锁的过期时间
                 lockLocally(lockID, stat.getExpirationTimestamp(), tx); // update local lock expiration time
+                // 将上述获取的锁，存储在标识当前存在锁的集合中Map<tx,Map<lockID,S>>，  key为事务、value中的map为当前事务获取的锁，key为lockID，value为当前获取分布式锁的ConsistentKeyStatus（一致性密匙状态）对象
                 lockState.take(tx, lockID, stat);
                 ok = true;
             } catch (TemporaryBackendException tse) {
+                // 在获取分布式锁失败后，捕获该异常，并抛出该异常
                 throw new TemporaryLockingException(tse);
             } catch (AssertionError ae) {
                 // Concession to ease testing with mocks & behavior verification
                 ok = true;
                 throw ae;
             } catch (Throwable t) {
+                // 出现底层存储错误！ 则直接加锁失败！
                 throw new PermanentLockingException(t);
             } finally {
+                // 判断是否成功获取锁，没有获分布式锁的，则释放本地锁
                 if (!ok) {
+                    // 没有成功获取锁，则释放本地锁
                     // lockState.release(tx, lockID); // has no effect
                     unlockLocally(lockID, tx);
                     if (null != tx.getConfiguration().getGroupName()) {
@@ -323,6 +336,8 @@ public abstract class AbstractLocker<S extends LockStatus> implements Locker {
                 }
             }
         } else {
+            // 如果获取本地锁失败，则直接抛出异常，不进行重新本地争用
+
             // Fail immediately with no retries on local contention
             throw new PermanentLockingException("Local lock contention");
         }
@@ -348,6 +363,7 @@ public abstract class AbstractLocker<S extends LockStatus> implements Locker {
         boolean ok = false;
         try {
             for (final Map.Entry<KeyColumn, S> entry : m.entrySet()) {
+                // 判断当前分布式锁的获取结果！
                 checkSingleLock(entry.getKey(), entry.getValue(), tx);
             }
             ok = true;

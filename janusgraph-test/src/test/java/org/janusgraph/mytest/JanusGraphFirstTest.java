@@ -18,6 +18,7 @@ import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversal;
 import org.apache.tinkerpop.gremlin.structure.Edge;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
 import org.janusgraph.core.attribute.Geoshape;
+import org.janusgraph.example.GraphOfTheGodsFactory;
 import org.janusgraph.mytest.base.BaseTest;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -38,7 +39,7 @@ public class JanusGraphFirstTest extends BaseTest {
     @Test
     public void firstTest() {
         // 使用GraphOfTheGodsFactory加载“The Graph of the Gods”图，这是JanusGraph用于测试自定义的一个图
-        // GraphOfTheGodsFactory.load(graph); // 第一次运行时添加，之后的运行将该语句注释掉，不需要重复的load
+         GraphOfTheGodsFactory.load(graph); // 第一次运行时添加，之后的运行将该语句注释掉，不需要重复的load
 
         // 获取图遍历对象实例
         g = graph.traversal();

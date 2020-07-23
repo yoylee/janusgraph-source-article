@@ -26,6 +26,7 @@ public class BaseTest {
     @AfterClass
     public static void closeGraph() throws Exception {
         if (g != null){
+            // 提交失败，会抛出throw new JanusGraphException("Could not commit transaction due to exception during persistence", e);
             g.tx().commit();
             g.close();
         }

@@ -73,9 +73,11 @@ public abstract class JanusGraphBlueprintsGraph implements JanusGraph {
     public abstract JanusGraphTransaction newThreadBoundTransaction();
 
     private JanusGraphBlueprintsTransaction getAutoStartTx() {
+        // 判断当前事务为空，则抛出异常终止程序
         if (txs == null) throw new IllegalStateException("Graph has been closed");
         tinkerpopTxContainer.readWrite();
 
+        // 获取当前线程对应的事务
         JanusGraphBlueprintsTransaction tx = txs.get();
         Preconditions.checkNotNull(tx,"Invalid read-write behavior configured: " +
                 "Should either open transaction or throw exception.");
@@ -294,6 +296,8 @@ public abstract class JanusGraphBlueprintsGraph implements JanusGraph {
 
         @Override
         public void doCommit() {
+            // 提交失败，会抛出throw new JanusGraphException("Could not commit transaction due to exception during persistence", e);异常
+            // commit过程中 对数据进行序列化，并提交到对应的 存储后端 和 索引后端中
             getAutoStartTx().commit();
         }
 

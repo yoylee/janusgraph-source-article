@@ -104,11 +104,14 @@ public class LocalLockMediator<T> {
         final StackTraceElement[] acquiredAt = log.isTraceEnabled() ?
                 new Throwable("Lock acquisition by " + requester).getStackTrace() : null;
 
+        // map的value，以事务为核心
         final AuditRecord<T> audit = new AuditRecord<>(requester, expires, acquiredAt);
+        //  ConcurrentHashMap实现locks, 以lockID为key，事务为核心value
         final AuditRecord<T> inMap = locks.putIfAbsent(kc, audit);
 
         boolean success = false;
 
+        // 代表当前map中不存在lockID，标识着锁没有被占用，成功获取锁
         if (null == inMap) {
             // Uncontended lock succeeded
             if (log.isTraceEnabled()) {
@@ -117,7 +120,11 @@ public class LocalLockMediator<T> {
             }
             success = true;
         } else if (inMap.equals(audit)) {
+            // 代表当前存在lockID，比对旧value和新value中的事务对象是否是同一个
             // requester has already locked kc; update expiresAt
+            // 上述判断后，事务对象为同一个，标识当前事务已经获取这个lockID的锁；
+            // 1. 这一步进行cas替换，作用是为了刷新过期时间
+            // 2. 并发处理，如果因为锁过期被其他事务占据，则占用锁失败
             success = locks.replace(kc, inMap, audit);
             if (log.isTraceEnabled()) {
                 if (success) {
@@ -129,13 +136,18 @@ public class LocalLockMediator<T> {
                 }
             }
         } else if (0 > inMap.expires.compareTo(times.getTime())) {
+            // 比较过期时间，如果锁已经过期，则当前事务可以占用该锁
+
             // the recorded lock has expired; replace it
+            // 1. 当前事务占用锁
+            // 2. 并发处理，如果因为锁过期被其他事务占据，则占用锁失败
             success = locks.replace(kc, inMap, audit);
             if (log.isTraceEnabled()) {
                 log.trace("Discarding expired lock: {} namespace={} txn={} expired={}",
                     kc, name, inMap.holder, inMap.expires);
             }
         } else {
+            // 标识：锁被其他事务占用，并且未过期，则占用锁失败
             // we lost to a valid lock
             if (log.isTraceEnabled()) {
                 log.trace("Local lock failed: {} namespace={} txn={} (already owned by {})",
