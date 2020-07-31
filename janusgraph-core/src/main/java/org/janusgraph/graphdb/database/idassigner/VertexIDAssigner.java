@@ -144,27 +144,39 @@ public class VertexIDAssigner implements AutoCloseable {
         idPools.clear();
     }
 
+    // 生成属性 和 边id时调用
     public void assignID(InternalRelation relation) {
+        // vertex type默认为空
         assignID(relation, null);
     }
 
+    //生成普通节点 和 schema的时候调用
     public void assignID(InternalVertex vertex, VertexLabel label) {
         Preconditions.checkArgument(vertex!=null && label!=null);
         assignID(vertex,getVertexIDType(label));
     }
 
 
+    /**
+     * 为节点分配正式的分布式id
+     * @param element
+     * @param vertexIDType
+     */
     private void assignID(InternalElement element, IDManager.VertexIDType vertexIDType) {
+        // 开始获取节点分布式唯一id
+        // 因为一些异常导致获取节点id失败，进行重试，重试此为默认为1000次
         for (int attempt = 0; attempt < MAX_PARTITION_RENEW_ATTEMPTS; attempt++) {
             long partitionID = -1;
-            if (element instanceof JanusGraphSchemaVertex) {
+            // 获取一个partition id
+            // 不同类型的数据，partition id的获取方式也有所不同
+            if (element instanceof JanusGraphSchemaVertex) { // schema相关，默认partition为0
                 partitionID = IDManager.SCHEMA_PARTITION;
-            } else if (element instanceof JanusGraphVertex) {
+            } else if (element instanceof JanusGraphVertex) { // 节点
                 if (vertexIDType== IDManager.VertexIDType.PartitionedVertex)
                     partitionID = IDManager.PARTITIONED_VERTEX_PARTITION;
                 else
                     partitionID = placementStrategy.getPartition(element);
-            } else if (element instanceof InternalRelation) {
+            } else if (element instanceof InternalRelation) { // 属性 + 边
                 InternalRelation relation = (InternalRelation)element;
                 if (attempt < relation.getLen()) { //On the first attempts, try to use partition of incident vertices
                     InternalVertex incident = relation.getVertex(attempt);
@@ -179,6 +191,7 @@ public class VertexIDAssigner implements AutoCloseable {
                 }
             }
             try {
+                // 正式分配节点id， 依据partition id 和 节点类型
                 assignID(element, partitionID, vertexIDType);
             } catch (IDPoolExhaustedException e) {
                 continue; //try again on a different partition
@@ -302,26 +315,39 @@ public class VertexIDAssigner implements AutoCloseable {
         Preconditions.checkArgument(partitionIDl >= 0 && partitionIDl < partitionIdBound, partitionIDl);
         final int partitionID = (int) partitionIDl;
 
+        // count为分布式id组成中的一部分，占55个字节
+        // 分布式id的唯一性保证，就在于`count`基于`partition`维度的唯一性
         long count;
-        if (element instanceof JanusGraphSchemaVertex) {
+        if (element instanceof JanusGraphSchemaVertex) { // schema节点处理
             Preconditions.checkArgument(partitionID==IDManager.SCHEMA_PARTITION);
             count = schemaIdPool.nextID();
-        } else if (userVertexIDType==IDManager.VertexIDType.PartitionedVertex) {
+        } else if (userVertexIDType==IDManager.VertexIDType.PartitionedVertex) { // 配置的热点节点，类似于`makeVertexLabel('product').partition()`的处理
             Preconditions.checkArgument(partitionID==IDManager.PARTITIONED_VERTEX_PARTITION);
             Preconditions.checkArgument(partitionVertexIdPool!=null);
             count = partitionVertexIdPool.nextID();
-        } else {
+        } else { // 普通节点和边类型的处理
+            // 首先获取当前partition敌营的idPool
             PartitionIDPool partitionPool = idPools.get(partitionID);
+            // 如果当前分区对应的IDPool为空，则创建一个默认的IDPool，默认size = 0
             if (partitionPool == null) {
+                // 在PartitionIDPool中包含多种类型对应的StandardIDPool类型
+                // StandardIDPool中包含对应的block信息和count信息
                 partitionPool = new PartitionIDPool(partitionID, idAuthority, idManager, renewTimeoutMS, renewBufferPercentage);
+                // 缓存下来
                 idPools.putIfAbsent(partitionID,partitionPool);
+                // 从缓存中再重新拿出
                 partitionPool = idPools.get(partitionID);
             }
+            // 确保partitionPool不为空
             Preconditions.checkNotNull(partitionPool);
+            // 判断当前分区的IDPool是否枯竭；已经被用完
             if (partitionPool.isExhausted()) {
+                // 如果被用完，则将该分区id放到对应的缓存中，避免之后获取分区id再获取到该分区id
                 placementStrategy.exhaustedPartition(partitionID);
+                // 抛出IDPool异常， 最外层捕获，然后进行重试获取节点id
                 throw new IDPoolExhaustedException("Exhausted id pool for partition: " + partitionID);
             }
+            // 存储当前类型对应的IDPool，因为partitionPool中保存好几个类型的IDPool
             IDPool idPool;
             if (element instanceof JanusGraphRelation) {
                 idPool = partitionPool.getPool(PoolType.RELATION);
@@ -330,9 +356,11 @@ public class VertexIDAssigner implements AutoCloseable {
                 idPool = partitionPool.getPool(PoolType.getPoolTypeFor(userVertexIDType));
             }
             try {
+                // 重要！！！！ 依据给定的IDPool获取count值！！！！
+                // 在此语句中设计 block的初始化 和 double buffer block的处理！
                 count = idPool.nextID();
                 partitionPool.accessed();
-            } catch (IDPoolExhaustedException e) {
+            } catch (IDPoolExhaustedException e) { // 如果该IDPool被用完，抛出IDPool异常， 最外层捕获，然后进行重试获取节点id
                 log.debug("Pool exhausted for partition id {}", partitionID);
                 placementStrategy.exhaustedPartition(partitionID);
                 partitionPool.exhaustedIdPool();
@@ -340,6 +368,10 @@ public class VertexIDAssigner implements AutoCloseable {
             }
         }
 
+        // 组装最终的分布式id，包含3中情况
+        // 1、属性和边的id：：[count + partition id]
+        // 2、schema对应的label key等：[count + 对应类型后缀]
+        // 3、节点的id：：[count + partition id + ID padding]
         long elementId;
         if (element instanceof InternalRelation) {
             elementId = idManager.getRelationID(count, partitionID);
@@ -356,6 +388,7 @@ public class VertexIDAssigner implements AutoCloseable {
         }
 
         Preconditions.checkArgument(elementId >= 0);
+        // 对节点对象赋值其分布式唯一id
         element.setId(elementId);
     }
 

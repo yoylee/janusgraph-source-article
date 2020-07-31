@@ -46,7 +46,7 @@ public class VertexOperationTest extends BaseTest {
         godProperties.add("god");
 
         godProperties.add("name");
-        godProperties.add("lyy");
+        godProperties.add("lyy_07_2");
 
         godProperties.add("age");
         godProperties.add(18);

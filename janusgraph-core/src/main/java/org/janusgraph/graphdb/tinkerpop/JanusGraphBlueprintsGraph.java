@@ -140,6 +140,7 @@ public abstract class JanusGraphBlueprintsGraph implements JanusGraph {
 
     @Override
     public JanusGraphVertex addVertex(Object... keyValues) {
+        // 添加节点
         return getAutoStartTx().addVertex(keyValues);
     }
 

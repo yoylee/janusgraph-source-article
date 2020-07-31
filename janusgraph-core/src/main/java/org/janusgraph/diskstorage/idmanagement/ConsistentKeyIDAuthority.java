@@ -202,33 +202,55 @@ public class ConsistentKeyIDAuthority extends AbstractIDAuthority implements Bac
         return BufferUtil.getIntBuffer(components);
     }
 
+    /**
+     * 获取idBlock
+     * @param partition
+     *            Partition for which to request an id block
+     * @param idNamespace namespace for ids within a partition
+     * @param timeout 超时时间，默认2min
+     *            When a call to this method is unable to return a id block
+     *            before this timeout elapses, the implementation must give up
+     *            and throw a {@code StorageException} ASAP
+     */
     @Override
     public synchronized IDBlock getIDBlock(final int partition, final int idNamespace, Duration timeout) throws BackendException {
         Preconditions.checkArgument(partition>=0 && partition<(1<< partitionBitWidth),"Invalid partition id [%s] for bit width [%s]",partition, partitionBitWidth);
         Preconditions.checkArgument(idNamespace>=0); //can be any non-negative value
 
+        // 开始时间
         final Timer methodTime = times.getTimer().start();
 
+        // 获取当前命名空间配置的blockSize，默认值10000；可自定义配置
         final long blockSize = getBlockSize(idNamespace);
+        // 获取当前命名空间配置的最大id值idUpperBound；值为：2的55次幂大小
         final long idUpperBound = getIdUpperBound(idNamespace);
-
+        // uniqueIdBitWidth标识uniqueId占用的位数；uniqueId为了兼容“关闭分布式id唯一性保障”的开关情况，uniqueIdBitWidth默认值=4
+        // 值：64-1(默认0)-5（分区占用位数）-3（ID Padding占用位数）-4（uniqueIdBitWidth） = 51；标识block中的上限为2的51次幂大小
         final int maxAvailableBits = (VariableLong.unsignedBitLength(idUpperBound)-1)-uniqueIdBitWidth;
         Preconditions.checkArgument(maxAvailableBits>0,"Unique id bit width [%s] is too wide for id-namespace [%s] id bound [%s]"
                                                 ,uniqueIdBitWidth,idNamespace,idUpperBound);
+        // 标识block中的上限为2的51次幂大小
         final long idBlockUpperBound = (1L <<maxAvailableBits);
 
+        // UniquePID用尽的UniquePID集合，默认情况下，randomUniqueIDLimit = 0；
         final List<Integer> exhaustedUniquePIDs = new ArrayList<>(randomUniqueIDLimit);
 
+        // 默认0.3秒  用于处理TemporaryBackendException异常情况（后端存储出现问题）下：阻塞一断时间，然后进行重试
         Duration backoffMS = idApplicationWaitMS;
 
         Preconditions.checkArgument(idBlockUpperBound>blockSize,
                 "Block size [%s] is larger than upper bound [%s] for bit width [%s]",blockSize,idBlockUpperBound,uniqueIdBitWidth);
 
+        // 从开始获取IDBlock开始，持续超时时间（默认2分钟）内重试获取IDBlock
         while (methodTime.elapsed().compareTo(timeout) < 0) {
+            // 获取uniquePID，默认情况下“开启分布式id唯一性控制”，值 = 0； 当“关闭分布式id唯一性控制”时为一个随机值
             final int uniquePID = getUniquePartitionID();
+            // 依据partition + idNamespace + uniquePID组装一个RowKey
             final StaticBuffer partitionKey = getPartitionKey(partition,idNamespace,uniquePID);
             try {
+                // 从Hbase中获取当前partition对应的IDPool中被分配的最大值，用来作为当前申请新的block的开始值
                 long nextStart = getCurrentID(partitionKey);
+                // 确保还未被分配的id池中的id个数，大于等于blockSize
                 if (idBlockUpperBound - blockSize <= nextStart) {
                     log.info("ID overflow detected on partition({})-namespace({}) with uniqueid {}. Current id {}, block size {}, and upper bound {} for bit width {}.",
                             partition, idNamespace, uniquePID, nextStart, blockSize, idBlockUpperBound, uniqueIdBitWidth);
@@ -247,28 +269,35 @@ public class ConsistentKeyIDAuthority extends AbstractIDAuthority implements Bac
 
                 // calculate the start (inclusive) and end (exclusive) of the allocation we're about to attempt
                 assert idBlockUpperBound - blockSize > nextStart;
+                // 获取当前想要获取block的最大值
                 long nextEnd = nextStart + blockSize;
                 StaticBuffer target = null;
 
                 // attempt to write our claim on the next id block
                 boolean success = false;
                 try {
+                    // ===开始：开始进行插入自身的block需求到Hbase
                     Timer writeTimer = times.getTimer().start();
+                    // 组装对应的Column: -nextEnd +  当前时间戳 + uid（唯一标识当前图实例）
                     target = getBlockApplication(nextEnd, writeTimer.getStartTime());
                     final StaticBuffer finalTarget = target; // copy for the inner class
-                    BackendOperation.execute(txh -> {
+                    BackendOperation.execute(txh -> { // 异步插入当前生成的RowKey 和 Column
                         idStore.mutate(partitionKey, Collections.singletonList(StaticArrayEntry.of(finalTarget)), KeyColumnValueStore.NO_DELETIONS, txh);
                         return true;
                     },this,times);
+                    // ===结束：插入完成
                     writeTimer.stop();
 
                     final boolean distributed = manager.getFeatures().isDistributed();
+                    // ===获取方才插入的时间耗时
                     Duration writeElapsed = writeTimer.elapsed();
+                    // 判断是否超过配置的超时时间，超过则报错TemporaryBackendException，然后等待一断时间进行重试
                     if (idApplicationWaitMS.compareTo(writeElapsed) < 0 && distributed) {
                         throw new TemporaryBackendException("Wrote claim for id block [" + nextStart + ", " + nextEnd + ") in " + (writeElapsed) + " => too slow, threshold is: " + idApplicationWaitMS);
                     } else {
 
                         assert 0 != target.length();
+                        // 组装下述基于上述Rowkey的Column的查找范围：(-nextEnd + 0 : 0nextEnd + 最大值)
                         final StaticBuffer[] slice = getBlockSlice(nextEnd);
 
                         /* At this point we've written our claim on [nextStart, nextEnd),
@@ -281,6 +310,7 @@ public class ConsistentKeyIDAuthority extends AbstractIDAuthority implements Bac
                         }
 
                         // Read all id allocation claims on this partition, for the counter value we're claiming
+                        // 异步获取指定Rowkey和指定Column区间的值
                         final List<Entry> blocks = BackendOperation.execute(
                             (BackendOperation.Transactional<List<Entry>>) txh -> idStore.getSlice(new KeySliceQuery(partitionKey, slice[0], slice[1]), txh),this,times);
                         if (blocks == null) throw new TemporaryBackendException("Could not read from storage");
@@ -291,8 +321,9 @@ public class ConsistentKeyIDAuthority extends AbstractIDAuthority implements Bac
                         /* If our claim is the lexicographically first one, then our claim
                          * is the most senior one and we own this id block
                          */
+                        // 如果获取的集合中，当前的图实例插入的数据是第一条，则表示获取block; 如果不是第一条，则获取Block失败
                         if (target.equals(blocks.get(0).getColumnAs(StaticBuffer.STATIC_FACTORY))) {
-
+                            // 组装IDBlock对象
                             ConsistentKeyIDBlock idBlock = new ConsistentKeyIDBlock(nextStart,blockSize,uniqueIdBitWidth,uniquePID);
 
                             if (log.isDebugEnabled()) {
@@ -301,16 +332,17 @@ public class ConsistentKeyIDAuthority extends AbstractIDAuthority implements Bac
                             }
 
                             success = true;
-                            return idBlock;
+                            return idBlock; // 返回
                         } else {
                             // Another claimant beat us to this id block -- try again.
                             log.debug("Failed to acquire ID block [{},{}) (another host claimed it first)", nextStart, nextEnd);
                         }
                     }
                 } finally {
+                    // 在获取Block失败后，删除当前的插入； 如果没有失败，则保留当前的插入，在hbase中标识该Block已经被占用
                     if (!success && null != target) {
                         //Delete claim to not pollute id space
-                        for (int attempt = 0; attempt < ROLLBACK_ATTEMPTS; attempt++) {
+                        for (int attempt = 0; attempt < ROLLBACK_ATTEMPTS; attempt++) { // 回滚：删除当前插入，尝试次数5次
                             try {
                                 final StaticBuffer finalTarget = target; // copy for the inner class
                                 BackendOperation.execute(txh -> {

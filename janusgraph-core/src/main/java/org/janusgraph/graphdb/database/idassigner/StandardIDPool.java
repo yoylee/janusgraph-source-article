@@ -174,10 +174,14 @@ public class StandardIDPool implements IDPool {
         Preconditions.checkState(!closed,"ID Pool has been closed for partition(%s)-namespace(%s) - cannot apply for new id block",
                 partition,idNamespace);
 
+        // 在分区对应的IDPool第一次使用时，double buffer的nextBlock为空
         if (null == nextBlock && null == idBlockFuture) {
+            // 异步启动 获取id block
             startIDBlockGetter();
         }
 
+        // 也是在分区对应的IDPool第一次使用时，因为上述为异步获取，所以在执行到这一步时nextBlock可能还没拿到
+        // 所以需要阻塞等待block的获取
         if (null == nextBlock) {
             waitForIDBlockGetter();
         }
@@ -185,40 +189,57 @@ public class StandardIDPool implements IDPool {
         if (nextBlock == ID_POOL_EXHAUSTION)
             throw new IDPoolExhaustedException("Exhausted ID Pool for partition(" + partition+")-namespace("+idNamespace+")");
 
+        // 将当前使用block指向next block
         currentBlock = nextBlock;
+        // index清零
         currentIndex = 0;
 
         log.debug("ID partition({})-namespace({}) acquired block: [{}]", partition, idNamespace, currentBlock);
 
         assert currentBlock.numIds()>0;
 
+        // nextBlock置空
         nextBlock = null;
 
         assert RENEW_ID_COUNT>0;
+        // renewBlockIndex用于双buffer中，当第一个buffer block使用的百分比，到达配置的百分比则触发other buffer block的获取
+        // 值current block 对应的count数量 - （值current block 对应的count数量 * 为renewBufferPercentage配置的剩余空间百分比）
+        // 在使用current block的时候，当current index  ==  renewBlockIndex时，触发double buffer next block的异步获取！！！！
         renewBlockIndex = Math.max(0,currentBlock.numIds()-Math.max(RENEW_ID_COUNT, Math.round(currentBlock.numIds()*renewBufferPercentage)));
         assert renewBlockIndex<currentBlock.numIds() && renewBlockIndex>=currentIndex;
     }
 
     @Override
     public synchronized long nextID() {
+        // currentIndex标识当前的index小于current block的最大值
         assert currentIndex <= currentBlock.numIds();
 
+        // 此处涉及两种情况：
+        // 1、分区对应的IDPool是第一次被初始化；则currentIndex = 0； currentBlock.numIds() = 0；
+        // 2、分区对应的该IDPool不是第一次，但是此次的index正好使用到了current block的最后一个count
         if (currentIndex == currentBlock.numIds()) {
             try {
+                // 将current block赋值为next block
+                // next block置空 并计算renewBlockIndex
                 nextBlock();
             } catch (InterruptedException e) {
                 throw new JanusGraphException("Could not renew id block due to interruption", e);
             }
         }
 
+        // 在使用current block的过程中，当current index  ==  renewBlockIndex时，触发double buffer next block的异步获取！！！！
         if (currentIndex == renewBlockIndex) {
+            // 异步获取next block
             startIDBlockGetter();
         }
 
+        // 生成最终的count
         long returnId = currentBlock.getId(currentIndex);
+        // current index + 1
         currentIndex++;
         if (returnId >= idUpperBound) throw new IDPoolExhaustedException("Reached id upper bound of " + idUpperBound);
         log.trace("partition({})-namespace({}) Returned id: {}", partition, idNamespace, returnId);
+        // 返回最终获取的分区维度的全局唯一count
         return returnId;
     }
 
@@ -248,10 +269,15 @@ public class StandardIDPool implements IDPool {
         if (closed) return; //Don't renew anymore if closed
         //Renew buffer
         log.debug("Starting id block renewal thread upon {}", currentIndex);
+        // 创建一个线程对象，包含给定的权限控制类、分区、命名空间、超时时间
         idBlockGetter = new IDBlockGetter(idAuthority, partition, idNamespace, renewTimeout);
+        // 提交获取double buffer的线程任务，异步执行
         idBlockFuture = exec.submit(idBlockGetter);
     }
 
+    /**
+     * 获取double buffer block的线程类
+     */
     private static class IDBlockGetter implements Callable<IDBlock> {
 
         private final Stopwatch alive;
@@ -285,6 +311,7 @@ public class StandardIDPool implements IDPool {
                             partition, idNamespace, running.stop(), alive.stop());
                     throw new JanusGraphException("ID block retrieval aborted by caller");
                 }
+                // 此处调用idAuthority 调用HBase进行占用获取Block
                 IDBlock idBlock = idAuthority.getIDBlock(partition, idNamespace, renewTimeout);
                 log.debug("Retrieved ID block from authority on partition({})-namespace({}), " +
                           "exec time {}, exec+q time {}",

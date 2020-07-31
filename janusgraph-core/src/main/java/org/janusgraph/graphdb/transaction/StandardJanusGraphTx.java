@@ -723,6 +723,7 @@ public class StandardJanusGraphTx extends JanusGraphBlueprintsTransaction implem
                 }
             }
             StandardEdge edge = new StandardEdge(IDManager.getTemporaryRelationID(temporaryIds.nextID()), label, (InternalVertex) outVertex, (InternalVertex) inVertex, ElementLifeCycle.New);
+            // 为edge分配分布式唯一id
             if (config.hasAssignIDsImmediately()) graph.assignID(edge);
             connectRelation(edge);
             return edge;
@@ -768,23 +769,6 @@ public class StandardJanusGraphTx extends JanusGraphBlueprintsTransaction implem
         for (IndexLockTuple lockTuple : uniqueIndexTuples) uniqueLock = new CombinerLock(uniqueLock,getLock(lockTuple),times);
         uniqueLock.lock(LOCK_TIMEOUT);
         try {
-//            //Check vertex-centric uniqueness -> this doesn't really make sense to check
-//            if (config.hasVerifyUniqueness()) {
-//                if (cardinality == Cardinality.SINGLE) {
-//                    if (!Iterables.isEmpty(query(vertex).type(key).properties()))
-//                        throw new SchemaViolationException("A property with the given key [%s] already exists on the vertex [%s] and the property key is defined as single-valued", key.name(), vertex);
-//                }
-//                if (cardinality == Cardinality.SET) {
-//                    if (!Iterables.isEmpty(Iterables.filter(query(vertex).type(key).properties(), new Predicate<JanusGraphVertexProperty>() {
-//                        @Override
-//                        public boolean apply(@Nullable JanusGraphVertexProperty janusgraphProperty) {
-//                            return normalizedValue.equals(janusgraphProperty.value());
-//                        }
-//                    })))
-//                        throw new SchemaViolationException("A property with the given key [%s] and value [%s] already exists on the vertex and the property key is defined as set-valued", key.name(), normalizedValue);
-//                }
-//            }
-
             //Delete properties if the cardinality is restricted
             if (cardinality==VertexProperty.Cardinality.single || cardinality== VertexProperty.Cardinality.set) {
                 Consumer<JanusGraphRelation> propertyRemover;
@@ -818,6 +802,7 @@ public class StandardJanusGraphTx extends JanusGraphBlueprintsTransaction implem
                 }
             }
             StandardVertexProperty prop = new StandardVertexProperty(IDManager.getTemporaryRelationID(temporaryIds.nextID()), key, (InternalVertex) vertex, normalizedValue, ElementLifeCycle.New);
+            // 分配属性的分布式唯一id
             if (config.hasAssignIDsImmediately()) graph.assignID(prop);
             connectRelation(prop);
             return prop;

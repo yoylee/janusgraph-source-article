@@ -13,7 +13,7 @@ We run the image interactively and request Docker to make the container's port `
 The server may need a few seconds to start up so be patient and wait for the corresponding log messages to appear.
 
 ??? note "Example log"
-    ```
+```
     SLF4J: Class path contains multiple SLF4J bindings.
     SLF4J: Found binding in [jar:file:/opt/janusgraph/lib/slf4j-log4j12-1.7.12.jar!/org/slf4j/impl/StaticLoggerBinder.class]
     SLF4J: Found binding in [jar:file:/opt/janusgraph/lib/logback-classic-1.1.3.jar!/org/slf4j/impl/StaticLoggerBinder.class]
@@ -30,7 +30,7 @@ The server may need a few seconds to start up so be patient and wait for the cor
     ...
     3965 [gremlin-server-boss-1] INFO  org.apache.tinkerpop.gremlin.server.GremlinServer  - Gremlin Server configured with worker thread pool of 1, gremlin pool of 8 and boss thread pool of 1.
     3965 [gremlin-server-boss-1] INFO  org.apache.tinkerpop.gremlin.server.GremlinServer  - Channel started at port 8182.
-    ```
+```
 
 We can now start a Gremlin Console on our local device and try to connect to the new server:
 ```bash

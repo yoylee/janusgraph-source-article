@@ -21,6 +21,8 @@ import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Test;
 
+import java.util.Date;
+
 /**
  * 边操作测试
  * @author liyangyang11
@@ -41,5 +43,19 @@ public class EdgeOperationTest extends BaseTest {
         Edge edge2 = sourceVertex.addEdge("father", targetVertex, "edge_no_index", "test_value");
         Assert.assertNotNull(edge);
         Assert.assertNotNull(edge2);
+    }
+
+    @Test
+    public void addSortKeyEdgeTest(){
+        Vertex sourceVertex = graph.traversal().V().has("name", "liyangyang5").next();
+        Assert.assertNotNull(sourceVertex);
+
+        Vertex targetVertex = graph.traversal().V().has("name", "liyangyang6").next();
+        Assert.assertNotNull(targetVertex);
+
+        Edge edge = sourceVertex.addEdge("friendDesc", targetVertex, "since", new Date(), "reason", "reason_value1");
+        Edge edge2 = sourceVertex.addEdge("friendDesc", targetVertex, "since", new Date(), "reason", "reason_value2");
+        Assert.assertNotNull(edge);
+//        Assert.assertNotNull(edge2);
     }
 }
