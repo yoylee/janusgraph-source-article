@@ -149,7 +149,10 @@ public abstract class AbstractVertex extends AbstractElement implements Internal
 	 */
 
     public<V> JanusGraphVertexProperty<V> property(final String key, final V value, final Object... keyValues) {
+        // 创建属性对象，包含：属性唯一性验证、属性
+        // 创建过程中要保证数据的唯一性约束！  getOrCreatePropertyKey(key, value) 用于保证属性key存在，并且value的数据类型满足key的配置；如果没有key则创建一个新的
         JanusGraphVertexProperty<V> p = tx().addProperty(it(), tx().getOrCreatePropertyKey(key, value), value);
+        // 此处在创建vertex时，keyValues.size = 0；所以不做任何处理
         ElementHelper.attachProperties(p,keyValues);
         return p;
     }

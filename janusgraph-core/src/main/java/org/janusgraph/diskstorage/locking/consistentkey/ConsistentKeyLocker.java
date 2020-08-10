@@ -317,21 +317,29 @@ public class ConsistentKeyLocker extends AbstractLocker<ConsistentKeyLockStatus>
     @Override
     protected ConsistentKeyLockStatus writeSingleLock(KeyColumn lockID, StoreTransaction txh) throws Throwable {
 
+        // 组装插入hbase数据的Rowkey
         final StaticBuffer lockKey = serializer.toLockKey(lockID.getKey(), lockID.getColumn());
         StaticBuffer oldLockCol = null;
 
+        // 进行尝试插入 ，默认尝试次数3次
         for (int i = 0; i < lockRetryCount; i++) {
+            // 尝试将数据插入到hbase中；oldLockCol表示要删除的column代表上一次尝试插入的数据
             WriteResult wr = tryWriteLockOnce(lockKey, oldLockCol, txh);
+            // 如果插入成功
             if (wr.isSuccessful() && wr.getDuration().compareTo(lockWait) <= 0) {
-                final Instant writeInstant = wr.getWriteTimestamp();
-                final Instant expireInstant = writeInstant.plus(lockExpire);
-                return new ConsistentKeyLockStatus(writeInstant, expireInstant);
+                final Instant writeInstant = wr.getWriteTimestamp(); // 写入时间
+                final Instant expireInstant = writeInstant.plus(lockExpire);// 过期时间
+                return new ConsistentKeyLockStatus(writeInstant, expireInstant); // 返回插入对象
             }
+            // 赋值当前的尝试插入的数据，要在下一次尝试时删除
             oldLockCol = wr.getLockCol();
+            // 判断插入失败原因，临时异常进行尝试，非临时异常停止尝试！
             handleMutationFailure(lockID, lockKey, wr, txh);
         }
+        // 处理在尝试了3次之后还是没插入成功的情况，删除最后一次尝试插入的数据
         tryDeleteLockOnce(lockKey, oldLockCol, txh);
         // TODO log exception or successful too-slow write here
+        // 抛出异常，标识导入数据失败
         throw new TemporaryBackendException("Lock write retry count exceeded");
     }
 
@@ -380,10 +388,13 @@ public class ConsistentKeyLocker extends AbstractLocker<ConsistentKeyLockStatus>
     private WriteResult tryWriteLockOnce(StaticBuffer key, StaticBuffer del, StoreTransaction txh) {
         Throwable t = null;
         final Timer writeTimer = times.getTimer().start();
+        // 组装要插入数据的column，组成：当前时间+标识唯一图实例的rid
         StaticBuffer newLockCol = serializer.toLockCol(writeTimer.getStartTime(), rid, times);
+        // 序列化
         Entry newLockEntry = StaticArrayEntry.of(newLockCol, zeroBuf);
         try {
             final StoreTransaction newTx = overrideTimestamp(txh, writeTimer.getStartTime());
+            // 插入上述组装的数据
             store.mutate(key, Collections.singletonList(newLockEntry),
                 null == del ? KeyColumnValueStore.NO_DELETIONS : Collections.singletonList(del), newTx);
         } catch (BackendException e) {
@@ -392,6 +403,7 @@ public class ConsistentKeyLocker extends AbstractLocker<ConsistentKeyLockStatus>
         }
         writeTimer.stop();
 
+        // 组装插入结果
         return new WriteResult(writeTimer.elapsed(), writeTimer.getStartTime(), newLockCol, t);
     }
 
@@ -434,7 +446,7 @@ public class ConsistentKeyLocker extends AbstractLocker<ConsistentKeyLockStatus>
         // ...and then filter out the TimestampRid objects with expired timestamps
         // (This doesn't use Iterables.filter and Predicate so that we can throw a checked exception if necessary)
         final List<TimestampRid> unexpiredTRs = new ArrayList<>(Iterables.size(iterable));
-        for (TimestampRid tr : iterable) {
+        for (TimestampRid tr : iterable) { // 过滤获取未过期的锁！
             final Instant cutoffTime = now.minus(lockExpire);
             if (tr.getTimestamp().isBefore(cutoffTime)) {
                 log.warn("Discarded expired claim on {} with timestamp {}", kc, tr.getTimestamp());

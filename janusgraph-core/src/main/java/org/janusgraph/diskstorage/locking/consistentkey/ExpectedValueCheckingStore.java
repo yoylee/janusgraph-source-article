@@ -111,6 +111,7 @@ public class ExpectedValueCheckingStore extends KCVSProxy {
             locker.writeLock(lockID, tx.getConsistentTx());
             // 执行前提：上述获取锁成功！
             // 存储期望值，此处为了实现当相同的key + value + tx多个加锁时，只处理第一个
+            // 存储在事务对象中，标识在commit判断锁是否获取成功时，当前事务插入的是哪个锁信息
             tx.storeExpectedValue(this, lockID, expectedValue);
         } else {
             // locker为空情况下，直接抛出一个运行时异常，终止程序

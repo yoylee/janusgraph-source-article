@@ -309,7 +309,7 @@ public abstract class AbstractLocker<S extends LockStatus> implements Locker {
                 // 尝试获取基于Hbase实现的分布式锁；
                 // （此处的获取锁只是将对应的KLV存储到Hbase中！存储成功并不代表获取锁成功）
                 S stat = writeSingleLock(lockID, tx);
-                // 获取锁分布式锁成功后，更新本地锁的过期时间为分布式锁的过期时间
+                // 获取锁分布式锁成功后（即写入成功后），更新本地锁的过期时间为分布式锁的过期时间
                 lockLocally(lockID, stat.getExpirationTimestamp(), tx); // update local lock expiration time
                 // 将上述获取的锁，存储在标识当前存在锁的集合中Map<tx,Map<lockID,S>>，  key为事务、value中的map为当前事务获取的锁，key为lockID，value为当前获取分布式锁的ConsistentKeyStatus（一致性密匙状态）对象
                 lockState.take(tx, lockID, stat);

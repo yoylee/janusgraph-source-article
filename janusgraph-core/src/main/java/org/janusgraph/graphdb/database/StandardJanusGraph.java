@@ -533,25 +533,25 @@ public class StandardJanusGraph extends JanusGraphBlueprintsGraph {
                                      final BackendTransaction mutator, final StandardJanusGraphTx tx,
                                      final boolean acquireLocks) throws BackendException {
 
-
-        ListMultimap<Long, InternalRelation> mutations = ArrayListMultimap.create();
-        ListMultimap<InternalVertex, InternalRelation> mutatedProperties = ArrayListMultimap.create();
+        // 在下述的处理中，属性和边都作为relation去处理； 源节点为当前vertex、目标节点为属性 or label or targetVertex
+        ListMultimap<Long, InternalRelation> mutations = ArrayListMultimap.create();// 存储vertex id为key，value集合中存储所有的属性、lable和edge
+        ListMultimap<InternalVertex, InternalRelation> mutatedProperties = ArrayListMultimap.create(); // 存储vertex id为key，value集合中存储所有的属性;用于后面便于通过该集合获取属性对应需要获取分布式锁的索引（也就是说配置了LOCK维度的索引）
         List<IndexSerializer.IndexUpdate> indexUpdates = Lists.newArrayList();
         //1) Collect deleted edges and their index updates and acquire edge locks
         // 收集已删除的边及其索引更新 并尝试获取边锁（此处的获取锁只是将对应的KLV存储到Hbase中！存储成功并不代表获取锁成功）
         for (InternalRelation del : Iterables.filter(deletedRelations,filter)) {
             Preconditions.checkArgument(del.isRemoved());
-            for (int pos = 0; pos < del.getLen(); pos++) {
-                InternalVertex vertex = del.getVertex(pos);
+            for (int pos = 0; pos < del.getLen(); pos++) { // 只拿到relation的source vertex
+                InternalVertex vertex = del.getVertex(pos);// relation中的source vertex
                 if (pos == 0 || !del.isLoop()) {
-                    if (del.isProperty()) mutatedProperties.put(vertex,del);
-                    mutations.put(vertex.longId(), del);
+                    if (del.isProperty()) mutatedProperties.put(vertex,del);// 将属性存放到mutatedProperties结构中，value是一个集合
+                    mutations.put(vertex.longId(), del);// 将所有的属性 or label or targetVertex存放到mutations结构中，value是一个集合
                 }
-                if (acquireLock(del,pos,acquireLocks)) {
+                if (acquireLock(del,pos,acquireLocks)) { // 判断是否需要获取edge lock！
                     Entry entry = edgeSerializer.writeRelation(del, pos, tx);
                     mutator.acquireEdgeLock(idManager.getKey(vertex.longId()), entry);
                 }
-            }
+            }// 获取边包含的属性；在节点插入时没有作用，插入边数据时，获取边上的属性对应的索引； 只有edge操作中包含边属性，并且包含索引！
             indexUpdates.addAll(indexSerializer.getIndexUpdates(del));
         }
 
@@ -575,12 +575,12 @@ public class StandardJanusGraph extends JanusGraphBlueprintsGraph {
                     mutator.acquireEdgeLock(idManager.getKey(vertex.longId()), entry.getColumn());
                 }
             }
-            // 获取边包含的属性 在节点插入时没有作用，插入边数据时，获取边上的属性对应的索引； 只有edge操作中包含边属性，并且包含索引！
+            // 获取边包含的属性；在节点插入时没有作用，插入边数据时，获取边上的属性对应的索引； 只有edge操作中包含边属性，并且包含索引！
             indexUpdates.addAll(indexSerializer.getIndexUpdates(add));
         }
 
-        //3) Collect all index update for vertices
-        // 收集节点的所有索引更新、操作节点时才有作用； 针对于插入edge的操作，不涉及此处
+        //3) Collect all index update for vertices 通过上述两步做了操作：收集以节点为维度的所有属性集合 和 所有的修改值！尝试获取了当前所有的Edge lock；
+        // 此处，收集节点对应属性对应的索引需要更新的数据、增加或删除节点时才有作用； 针对于插入edge的操作，不涉及此处
         for (InternalVertex v : mutatedProperties.keySet()) {
             indexUpdates.addAll(indexSerializer.getIndexUpdates(v,mutatedProperties.get(v)));
         }
@@ -650,19 +650,19 @@ public class StandardJanusGraph extends JanusGraphBlueprintsGraph {
         boolean has2iMods = false;
         for (IndexSerializer.IndexUpdate indexUpdate : indexUpdates) {
             assert indexUpdate.isAddition() || indexUpdate.isDeletion();
-            if (indexUpdate.isCompositeIndex()) {
+            if (indexUpdate.isCompositeIndex()) { // 处理基于第三方存储的组合索引数据
                 final IndexSerializer.IndexUpdate<StaticBuffer,Entry> update = indexUpdate;
                 if (update.isAddition())
                     mutator.mutateIndex(update.getKey(), Lists.newArrayList(update.getEntry()), KCVSCache.NO_DELETIONS);
                 else
                     mutator.mutateIndex(update.getKey(), KeyColumnValueStore.NO_ADDITIONS, Lists.newArrayList(update.getEntry()));
-            } else {
+            } else { // 处理基于第三方索引组件的 混合索引数据
                 final IndexSerializer.IndexUpdate<String,IndexEntry> update = indexUpdate;
                 has2iMods = true;
                 IndexTransaction itx = mutator.getIndexTransaction(update.getIndex().getBackingIndexName()); // 获取外部索引存储事务对象，我们使用的是es，则此处获取es的事务对象
-                String indexStore = ((MixedIndexType)update.getIndex()).getStoreName(); // 获取当前索引的存储类型，在es中边属性"lives"的mixed index索引为“edges”，节点属性"age"属性的mixed index索引类型为“vertices”
+                String indexStore = ((MixedIndexType)update.getIndex()).getStoreName(); // 获取当前索引的存储类型，在es中边属性"lives"的mixed index类型为“edges（诸神之图自定义）”，节点属性"age"属性的mixed index类型为“vertices（诸神之图自定义）”
                 if (update.isAddition())
-                    itx.add(indexStore, update.getKey(), update.getEntry(), update.getElement().isNew()); // update.getKey()作为文档id；entry中的属性名称作为es索引中“字段”；entry中的属性值作为es中索引的“字段值”；
+                    itx.add(indexStore, update.getKey(), update.getEntry(), update.getElement().isNew()); // update.getKey()（节点id）作为文档id；entry中的属性名称作为es索引中“字段”；entry中的属性值作为es中索引的“字段值”；
                 else
                     itx.delete(indexStore,update.getKey(),update.getEntry().field,update.getEntry().value,update.getElement().isRemoved());
             }
@@ -684,7 +684,7 @@ public class StandardJanusGraph extends JanusGraphBlueprintsGraph {
         log.debug("Saving transaction. Added {}, removed {}", addedRelations.size(), deletedRelations.size());
         if (!tx.getConfiguration().hasCommitTime())
             tx.getConfiguration().setCommitTime(times.getTime());
-        // 获取配置的事务提交时间 ？？
+        // 获取配置的事务提交时间，主要用于日志打印
         final Instant txTimestamp = tx.getConfiguration().getCommitTime();
         // 图实例维度，并发获取事务id，通过AtomicLong实现
         final long transactionId = txCounter.incrementAndGet();
@@ -694,7 +694,7 @@ public class StandardJanusGraph extends JanusGraphBlueprintsGraph {
             idAssigner.assignIDs(addedRelations);
 
         //3. Commit
-        // 获取底层存储的事务对象
+        // 获取底层存储的事务对象；对象中在下述的处理后，会将对应序列化后的relation数据 和 index需要更新的数据添加到该对象中；用于数据的持久化
         BackendTransaction mutator = tx.getTxHandle();
         // 判断是否获取锁，默认为true
         final boolean acquireLocks = tx.getConfiguration().hasAcquireLocks();

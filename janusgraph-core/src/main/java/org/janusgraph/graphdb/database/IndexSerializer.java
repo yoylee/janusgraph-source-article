@@ -449,8 +449,8 @@ public class IndexSerializer {
     public static IndexRecords indexMatches(JanusGraphVertex vertex, CompositeIndexType index,
                                             PropertyKey replaceKey, Object replaceValue) {
         final IndexRecords matches = new IndexRecords();
-        final IndexField[] fields = index.getFieldKeys();
-        if (indexAppliesTo(index,vertex)) {
+        final IndexField[] fields = index.getFieldKeys(); // 获取索引对应的 属性key
+        if (indexAppliesTo(index,vertex)) { 
             indexMatches(vertex,new RecordEntry[fields.length],matches,fields,0,false,
                                             replaceKey,new RecordEntry(0,replaceValue,replaceKey));
         }
@@ -465,31 +465,38 @@ public class IndexSerializer {
         return matches;
     }
 
+    // 通过递归调用的方式，处理该索引涉及到的属性集合
     private static void indexMatches(JanusGraphVertex vertex, RecordEntry[] current, IndexRecords matches,
                                      IndexField[] fields, int pos,
                                      boolean onlyLoaded, PropertyKey replaceKey, RecordEntry replaceValue) {
+        // 当递归处理满足下述条件后，表明已经将索引涉及到的所有的属性全部处理完毕
         if (pos>= fields.length) {
+            // 最终将所有，满足的value值放入集合中返回
             matches.add(current);
             return;
         }
 
+        // 获取当前位置的type key，例如userId_I的第一个type为user_id
         final PropertyKey key = fields[pos].getFieldKey();
 
         List<RecordEntry> values;
+        // 如果当前key 等于 需要被替换的key；
+        // 此处被替换的key，在添加节点的逻辑中标识，当前属性的key
         if (key.equals(replaceKey)) {
+            // value则被赋值为需要被替换的属性
             values = ImmutableList.of(replaceValue);
-        } else {
+        } else { // 如果是组合索引，当前的属性key不等于要被替换的key
             values = new ArrayList<>();
             Iterable<JanusGraphVertexProperty> props;
             if (onlyLoaded ||
-                    (!vertex.isNew() && IDManager.VertexIDType.PartitionedVertex.is(vertex.longId()))) {
+                    (!vertex.isNew() && IDManager.VertexIDType.PartitionedVertex.is(vertex.longId()))) { // 保证只加载 或者 节点不为新节点并且是分区节点
                 //going through transaction so we can query deleted vertices
                 final VertexCentricQueryBuilder qb = ((InternalVertex)vertex).tx().query(vertex);
                 qb.noPartitionRestriction().type(key);
                 if (onlyLoaded) qb.queryOnlyLoaded();
                 props = qb.properties();
-            } else {
-                props = vertex.query().keys(key.name()).properties();
+            } else { // 正常情况下
+                props = vertex.query().keys(key.name()).properties(); // 获取当前属性针对于当前节点，对应的所有属性对象（id、key、value）
             }
             for (final JanusGraphVertexProperty p : props) {
                 assert !onlyLoaded || p.isLoaded() || p.isRemoved();

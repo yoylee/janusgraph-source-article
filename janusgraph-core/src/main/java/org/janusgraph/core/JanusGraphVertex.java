@@ -66,6 +66,8 @@ public interface JanusGraphVertex extends JanusGraphElement, Vertex {
      * @param value value of the property to be created
      * @return New property
      * @throws IllegalArgumentException if the value does not match the data type of the property key.
+     *
+     * 为这个顶点上的给定键创建并返回一个新的JanusGraphVertexProperty，其值为指定的对象。
      */
     @Override
     default<V> JanusGraphVertexProperty<V> property(String key, V value) {

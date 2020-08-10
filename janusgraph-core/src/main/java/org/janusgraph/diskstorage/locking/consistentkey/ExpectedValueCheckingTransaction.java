@@ -88,9 +88,9 @@ public class ExpectedValueCheckingTransaction implements StoreTransaction {
 
     @Override
     public void commit() throws BackendException {
-        inconsistentTx.commit();
-        deleteAllLocks();
-        strongConsistentTx.commit();
+        inconsistentTx.commit(); // 提交数据
+        deleteAllLocks(); // 删除所有的本地锁 + 分布式锁
+        strongConsistentTx.commit(); //
     }
 
     /**

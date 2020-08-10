@@ -46,12 +46,25 @@ public class VertexOperationTest extends BaseTest {
         godProperties.add("god");
 
         godProperties.add("name");
-        godProperties.add("lyy_07_2");
+        godProperties.add("lyy_07_11");
 
         godProperties.add("age");
         godProperties.add(18);
 
         JanusGraphVertex godVertex = graph.addVertex(godProperties.toArray());
+
+
+//        List<Object> godPropertiesTwo = new ArrayList<>();
+//        godPropertiesTwo.add(T.label);
+//        godPropertiesTwo.add("god");
+//
+//        godPropertiesTwo.add("name");
+//        godPropertiesTwo.add("lyy_07_11");
+//
+//        godPropertiesTwo.add("age");
+//        godPropertiesTwo.add(18);
+
+//        JanusGraphVertex godVertexTwo = graph.addVertex(godPropertiesTwo.toArray());
 
         assertNotNull(godVertex);
     }

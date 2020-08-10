@@ -63,9 +63,9 @@ public class BackendOperation {
         long maxTime = System.currentTimeMillis()+totalWaitTime.toMillis();
         Duration waitTime = pertubTime(BASE_REATTEMPT_TIME);
         BackendException lastException;
-        while (true) {
+        while (true) { // 当判断分布式锁获取失败后，进行重试！（因为正在占用的锁在使用完后会被释放！）
             try {
-                return exe.call();
+                return exe.call(); // 执行持久化插入！
             } catch (final Throwable e) {
                 //Find inner-most StorageException
                 Throwable ex = e;
@@ -73,7 +73,7 @@ public class BackendOperation {
                 do {
                     if (ex instanceof BackendException) storeEx = (BackendException)ex;
                 } while ((ex=ex.getCause())!=null);
-                if (storeEx!=null && storeEx instanceof TemporaryBackendException) {
+                if (storeEx!=null && storeEx instanceof TemporaryBackendException) { // 如果是临时异常 or 判断first column不等于当前锁对应的column
                     lastException = storeEx;
                 } else if (e instanceof BackendException) {
                     throw (BackendException)e;
@@ -83,10 +83,10 @@ public class BackendOperation {
             }
             //Wait and retry
             assert lastException!=null;
-            if (System.currentTimeMillis()+waitTime.toMillis()<maxTime) {
+            if (System.currentTimeMillis()+waitTime.toMillis()<maxTime) { // 保证操作时间不超过最大超时时间！
                 log.info("Temporary exception during backend operation ["+exe.toString()+"]. Attempting backoff retry.",lastException);
                 try {
-                    Thread.sleep(waitTime.toMillis());
+                    Thread.sleep(waitTime.toMillis()); // 睡眠一段时间后，通过while true进行重试持久化数据！
                 } catch (InterruptedException r) {
                     // added thread interrupt signal to support traversal interruption
                     Thread.currentThread().interrupt();
@@ -95,7 +95,7 @@ public class BackendOperation {
             } else {
                 break;
             }
-            waitTime = pertubTime(waitTime.multipliedBy(2));
+            waitTime = pertubTime(waitTime.multipliedBy(2)); // 设定下一次的睡眠时间，每次睡眠时间2倍递增！！
         }
         throw new TemporaryBackendException("Could not successfully complete backend operation due to repeated temporary exceptions after "+totalWaitTime,lastException);
     }

@@ -507,6 +507,8 @@ public class StandardJanusGraphTx extends JanusGraphBlueprintsTransaction implem
         Preconditions.checkArgument(vertexId == null || IDManager.VertexIDType.NormalVertex.is(vertexId), "Not a valid vertex id: %s", vertexId);
         Preconditions.checkArgument(vertexId == null || ((InternalVertexLabel)label).hasDefaultConfiguration(), "Cannot only use default vertex labels: %s",label);
         Preconditions.checkArgument(vertexId == null || !config.hasVerifyExternalVertexExistence() || !containsVertex(vertexId), "Vertex with given id already exists: %s", vertexId);
+        // 生成vertex对象
+        // 传入的vertex id为空，则生成一个临时vertex id（使用AtomicLong实现：(1L<<63)|AtomicLong value）
         StandardVertex vertex = new StandardVertex(this, IDManager.getTemporaryVertexID(IDManager.VertexIDType.NormalVertex, temporaryIds.nextID()), ElementLifeCycle.New);
         if (vertexId != null) {
             vertex.setId(vertexId);
@@ -642,16 +644,16 @@ public class StandardJanusGraphTx extends JanusGraphBlueprintsTransaction implem
     }
 
     private TransactionLock getUniquenessLock(final JanusGraphVertex out, final InternalRelationType type, final Object in) {
-        Multiplicity multiplicity = type.multiplicity();
-        TransactionLock uniqueLock = FakeLock.INSTANCE;
-        if (config.hasVerifyUniqueness() && multiplicity.isConstrained()) {
+        Multiplicity multiplicity = type.multiplicity(); // 针对于唯一属性，是many2one类型，可以有多个节点指向同一个唯一属性
+        TransactionLock uniqueLock = FakeLock.INSTANCE; // 默认是假锁，也是无锁
+        if (config.hasVerifyUniqueness() && multiplicity.isConstrained()) { //
             uniqueLock = null;
-            if (multiplicity==Multiplicity.SIMPLE) {
+            if (multiplicity==Multiplicity.SIMPLE) { // 默认情况下，两个节点之间只能存在一个这种的edge
                 uniqueLock = getLock(out, type, in);
             } else {
                 for (Direction dir : Direction.proper) {
-                    if (multiplicity.isUnique(dir)) {
-                        TransactionLock lock = getLock(dir == Direction.OUT ? out : in, type, dir);
+                    if (multiplicity.isUnique(dir)) { // 循环遍历 out 和 in； out在many2one情况下为唯一情况； in在one2many为唯一情况！
+                        TransactionLock lock = getLock(dir == Direction.OUT ? out : in, type, dir); // 因为事务只由单线程访问，所以不需要针对于事务内加锁；默认为一个假锁
                         if (uniqueLock==null) uniqueLock=lock;
                         else uniqueLock=new CombinerLock(uniqueLock,lock,times);
                     }
@@ -753,61 +755,63 @@ public class StandardJanusGraphTx extends JanusGraphBlueprintsTransaction implem
         Preconditions.checkArgument(!(key instanceof ImplicitKey),"Cannot create a property of implicit type: %s",key.name());
         vertex = ((InternalVertex) vertex).it();
         Preconditions.checkNotNull(key);
-        checkPropertyConstraintForVertexOrCreatePropertyConstraint(vertex, key);
-        final Object normalizedValue = verifyAttribute(key, value);
-        Cardinality keyCardinality = key.cardinality();
+        checkPropertyConstraintForVertexOrCreatePropertyConstraint(vertex, key); // 检查节点对应的属性约束 或 创建属性的约束
+        final Object normalizedValue = verifyAttribute(key, value);  // 判断属性类型是否满足janusgraph规定的属性类型
+        Cardinality keyCardinality = key.cardinality(); // 获取属性key对应的"基数"类型，signal、list、set三种
 
-        //Determine unique indexes
+        //Determine unique indexes  获取属性对应的唯一索引；组装索引 元组(索引对象，对应的属性对象)
         final List<IndexLockTuple> uniqueIndexTuples = new ArrayList<>();
-        for (CompositeIndexType index : TypeUtil.getUniqueIndexes(key)) {
+        for (CompositeIndexType index : TypeUtil.getUniqueIndexes(key)) { // 在对应的key对象中包含key对应的索引相关信息，可能多个，
+            // 获取当前索引；参数：节点、索引、需要被替换的key、需要被替换的value
             IndexSerializer.IndexRecords matches = IndexSerializer.indexMatches(vertex, index, key, normalizedValue);
             for (Object[] match : matches.getRecordValues()) uniqueIndexTuples.add(new IndexLockTuple(index,match));
         }
 
-        TransactionLock uniqueLock = getUniquenessLock(vertex, (InternalRelationType) key, normalizedValue);
-        //Add locks for unique indexes
+        TransactionLock uniqueLock = getUniquenessLock(vertex, (InternalRelationType) key, normalizedValue); // 此处获取当前事务内的事务锁；因为事务内默认单线程处理；所以此处默认为获取假锁！避免一个事务内多线程处理并发问题
+        //Add locks for unique indexes 为所有唯一索引加锁；此处使用了一个“加锁链”！
         for (IndexLockTuple lockTuple : uniqueIndexTuples) uniqueLock = new CombinerLock(uniqueLock,getLock(lockTuple),times);
-        uniqueLock.lock(LOCK_TIMEOUT);
+        uniqueLock.lock(LOCK_TIMEOUT); // 对uniqueLock加锁链进行递归try加锁；保证时间未超时！ 加锁失败则抛出异常，标识添加节点失败！
         try {
-            //Delete properties if the cardinality is restricted
+            //Delete properties if the cardinality is restricted 如果key的Cardinality类型为single或者set则删除图中当前的属性
             if (cardinality==VertexProperty.Cardinality.single || cardinality== VertexProperty.Cardinality.set) {
                 Consumer<JanusGraphRelation> propertyRemover;
                 if (cardinality == VertexProperty.Cardinality.single)
-                    propertyRemover = JanusGraphElement::remove;
+                    propertyRemover = JanusGraphElement::remove; // 赋值删除操作代码
                 else
                     propertyRemover = p -> { if (((JanusGraphVertexProperty)p).value().equals(normalizedValue)) p.remove(); };
 
-                /* If we are simply overwriting a vertex property, then we don't have to explicitly remove it thereby saving a read operation
-                   However, this only applies if
-                   1) we don't lock on the property key or consistency checks are disabled and
-                   2) there are no indexes for this property key
-                   3) the cardinalities match (if we overwrite a set with single, we need to read all other values to delete)
+                /* 如果我们只是简单地覆盖一个顶点属性，那么我们不必显式地删除它，从而节省了一个读操作
+                   然而，这只适用于以下3个条件都满足
+                   1) 没有锁定属性键或一致性检查被禁用
+                   2) 该属性键没有索引
+                   3) 基数匹配(不匹配的话，假设用single覆盖一个set，则需要读取要删除的所有其他值)
+                   也就是说，在同时满足上述3个条件的情况下，直接覆盖即可，无需删除当前图中存在的属性，从而省去一个读操作！
                 */
 
                 if ( (!config.hasVerifyUniqueness() || ((InternalRelationType)key).getConsistencyModifier()!=ConsistencyModifier.LOCK) &&
                         !TypeUtil.hasAnyIndex(key) && cardinality==keyCardinality.convert()) {
-                    //Only delete in-memory so as to not trigger a read from the database which isn't necessary because we will overwrite blindly
+                    // 满足上述列出的三种情况，则只在内存中删除，这样就不会触发对数据库的读取，这是不必要的，因为在满足上述条件下会去直接覆盖掉原有数据
                     ((InternalVertex) vertex).getAddedRelations(p -> p.getType().equals(key)).forEach(propertyRemover);
-                } else {
+                } else { // 从图库中读出对应属性key的所有属性值，并赋值到DeleteedRelations中，在commit时进行删除！
                     ((InternalVertex) vertex).query().types(key).properties().forEach(propertyRemover);
                 }
             }
 
-            //Check index uniqueness
+            //Check index uniqueness 验证属性唯一性！如果属性有唯一索引，则需要保证属性值在图中保持唯一；如果重复则抛出异常，导入失败！
             if (config.hasVerifyUniqueness()) {
-                //Check all unique indexes
+                //Check all unique indexes 循环遍历当前属性对应的所有有关系的index
                 for (IndexLockTuple lockTuple : uniqueIndexTuples) {
-                    if (!Iterables.isEmpty(IndexHelper.getQueryResults(lockTuple.getIndex(), lockTuple.getAll(), this)))
+                    if (!Iterables.isEmpty(IndexHelper.getQueryResults(lockTuple.getIndex(), lockTuple.getAll(), this))) // 从图库中根据对应索引查询出对应的属性和属性值； 如果查询为空，说明该属性在图中不存在，如果不为空说明存在，则抛出异常，节点插入失败
                         throw new SchemaViolationException("Adding this property for key [%s] and value [%s] violates a uniqueness constraint [%s]", key.name(), normalizedValue, lockTuple.getIndex());
                 }
             }
-            StandardVertexProperty prop = new StandardVertexProperty(IDManager.getTemporaryRelationID(temporaryIds.nextID()), key, (InternalVertex) vertex, normalizedValue, ElementLifeCycle.New);
+            StandardVertexProperty prop = new StandardVertexProperty(IDManager.getTemporaryRelationID(temporaryIds.nextID()), key, (InternalVertex) vertex, normalizedValue, ElementLifeCycle.New); // 组装对应property对象，参数：临时节点id、属性类型、关联的节点、属性值、属性类型
             // 分配属性的分布式唯一id
             if (config.hasAssignIDsImmediately()) graph.assignID(prop);
-            connectRelation(prop);
+            connectRelation(prop); // 将property和vertex的关系组装为一个relation处理，添加到addRelations集合中！ 并将节点添加到vertexCache中！
             return prop;
         } finally {
-            uniqueLock.unlock();
+            uniqueLock.unlock(); // 解锁，避免异常发生导致死锁！
         }
 
     }

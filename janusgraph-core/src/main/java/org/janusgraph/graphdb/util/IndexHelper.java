@@ -29,7 +29,7 @@ import org.apache.tinkerpop.gremlin.structure.Element;
  */
 public class IndexHelper {
     public static Iterable<? extends Element> getQueryResults(CompositeIndexType index, Object[] values, StandardJanusGraphTx tx) {
-        GraphCentricQueryBuilder gb = getQuery(index,values,tx);
+        GraphCentricQueryBuilder gb = getQuery(index,values,tx); // 组装查询语句
         switch(index.getElement()) {
             case VERTEX:
                 return gb.vertices();

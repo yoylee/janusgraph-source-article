@@ -98,13 +98,17 @@ public abstract class JanusGraphBlueprintsTransaction implements JanusGraphTrans
      *
      * @param keyValues key-value pairs of properties to characterize or attach to the vertex
      * @return New vertex
+     * 添加一个新的节点
      */
     @Override
     public JanusGraphVertex addVertex(Object... keyValues) {
         ElementHelper.legalPropertyKeyValueArray(keyValues);
         if (ElementHelper.getIdValue(keyValues).isPresent() && !((StandardJanusGraph) getGraph()).getConfiguration().allowVertexIdSetting()) throw Vertex.Exceptions.userSuppliedIdsNotSupported();
         Object labelValue = null;
+        // 用户参数验证
         for (int i = 0; i < keyValues.length; i = i + 2) {
+            // 验证传参中的label参数；
+            // label值不为空，并且不为隐藏key
             if (keyValues[i].equals(T.label)) {
                 labelValue = keyValues[i+1];
                 Preconditions.checkArgument(labelValue instanceof VertexLabel || labelValue instanceof String,
@@ -113,10 +117,10 @@ public abstract class JanusGraphBlueprintsTransaction implements JanusGraphTrans
             }
         }
         VertexLabel label = BaseVertexLabel.DEFAULT_VERTEXLABEL; // 赋值节点的默认label：vertex
-        if (labelValue!=null) { // 如果给定的参数中包含label,则使用给定的label
+        if (labelValue!=null) { // 如果给定的参数中包含label,则使用给定的label; 从缓存中获取到一杯缓存的对应的VertexLabel对象！
             label = (labelValue instanceof VertexLabel)?(VertexLabel)labelValue:getOrCreateVertexLabel((String) labelValue);
         }
-
+        // 获取给定参数的vertex分布式唯一id，如果给定则获取其值； 为给定则下述操作中进行分配
         final Long id = ElementHelper.getIdValue(keyValues).map(Number.class::cast).map(Number::longValue).orElse(null);
         final JanusGraphVertex vertex = addVertex(id, label); // 分配临时节点id（如果配置了可以立即分配节点id的话，会分配正式的节点id），并将 节点存在属性 和 节点和label的边 两种默认添加的关系
         org.janusgraph.graphdb.util.ElementHelper.attachProperties(vertex, keyValues); // 处理所有自定义的属性

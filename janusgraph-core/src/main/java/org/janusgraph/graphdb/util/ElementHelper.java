@@ -75,9 +75,10 @@ public class ElementHelper {
         if (null == vertex)
             throw Graph.Exceptions.argumentCanNotBeNull("vertex");
 
+        // 循环处理自定义给定的所有属性； vertex id 和 label除外
         for (int i = 0; i < propertyKeyValues.length; i = i + 2) {
             if (!propertyKeyValues[i].equals(T.id) && !propertyKeyValues[i].equals(T.label)) // 不处理id 和  label
-                vertex.property((String) propertyKeyValues[i], propertyKeyValues[i + 1]);
+                vertex.property((String) propertyKeyValues[i], propertyKeyValues[i + 1]); // 最终结果，生成JanusGraphVertexProperty对象，将属性和节点的关系添加到addRelations中
         }
     }
 
