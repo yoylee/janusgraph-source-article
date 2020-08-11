@@ -57,7 +57,7 @@ public class ElementHelper {
 
     public static void attachProperties(JanusGraphRelation element, Object... keyValues) {
         if (keyValues==null || keyValues.length==0) return; //Do nothing
-        org.apache.tinkerpop.gremlin.structure.util.ElementHelper.legalPropertyKeyValueArray(keyValues);
+        org.apache.tinkerpop.gremlin.structure.util.ElementHelper.legalPropertyKeyValueArray(keyValues);// 判断自定义参数的键值对是否合法
         if (org.apache.tinkerpop.gremlin.structure.util.ElementHelper.getIdValue(keyValues).isPresent()) throw Edge.Exceptions.userSuppliedIdsNotSupported();
         if (org.apache.tinkerpop.gremlin.structure.util.ElementHelper.getLabelValue(keyValues).isPresent()) throw new IllegalArgumentException("Cannot provide label as argument");
         org.apache.tinkerpop.gremlin.structure.util.ElementHelper.attachProperties(element,keyValues);

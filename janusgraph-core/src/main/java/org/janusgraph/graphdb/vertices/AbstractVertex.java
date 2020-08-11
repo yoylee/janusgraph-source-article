@@ -164,10 +164,19 @@ public abstract class AbstractVertex extends AbstractElement implements Internal
         return p;
     }
 
+    /**
+     * 在为添加edge数据的时候调用！
+     * @param label  label of the edge to be created
+     * @param vertex incoming vertex of the edge to be created
+     * @param keyValues 属性值
+     * @return edge 对象
+     */
     @Override
     public JanusGraphEdge addEdge(String label, Vertex vertex, Object... keyValues) {
         Preconditions.checkArgument(vertex instanceof JanusGraphVertex,"Invalid vertex provided: %s",vertex);
+        // 生成edge对象
         JanusGraphEdge edge = tx().addEdge(it(), (JanusGraphVertex) vertex, tx().getOrCreateEdgeLabel(label));
+        // 将给定edge的自定义属性赋值到edge对象中
         ElementHelper.attachProperties(edge,keyValues);
         return edge;
     }

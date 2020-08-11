@@ -701,13 +701,16 @@ public class StandardJanusGraphTx extends JanusGraphBlueprintsTransaction implem
 
     public JanusGraphEdge addEdge(JanusGraphVertex outVertex, JanusGraphVertex inVertex, EdgeLabel label) {
         verifyWriteAccess(outVertex, inVertex);
+        // 获取out vertex对象 和 in vertex 对象
         outVertex = ((InternalVertex) outVertex).it();
         inVertex = ((InternalVertex) inVertex).it();
+
         Preconditions.checkNotNull(label);
-        checkConnectionConstraintOrCreateConnectionConstraint(outVertex, inVertex, label);
+        checkConnectionConstraintOrCreateConnectionConstraint(outVertex, inVertex, label);// 检查连接约束，两个节点是否可以存在该边
         Multiplicity multiplicity = label.multiplicity();
+        // 获取基于当前事务的唯一约束，避免事务内多线程并发问题； 默认不开启事务多线程处理！所以，默认情况下获取的为FakeLock 也就是假锁！
         TransactionLock uniqueLock = getUniquenessLock(outVertex, (InternalRelationType) label,inVertex);
-        uniqueLock.lock(LOCK_TIMEOUT);
+        uniqueLock.lock(LOCK_TIMEOUT); // 获取锁！
         try {
             //Check uniqueness
             if (config.hasVerifyUniqueness()) {
@@ -724,12 +727,15 @@ public class StandardJanusGraphTx extends JanusGraphBlueprintsTransaction implem
                             throw new SchemaViolationException("An edge with the given label already exists on the in-vertex and the label [%s] is in-unique", label.name());
                 }
             }
+            // 生成edge对象；使用AtomicLong生成临时节点id、edge label、out vertex、in vertex、新边
             StandardEdge edge = new StandardEdge(IDManager.getTemporaryRelationID(temporaryIds.nextID()), label, (InternalVertex) outVertex, (InternalVertex) inVertex, ElementLifeCycle.New);
             // 为edge分配分布式唯一id
             if (config.hasAssignIDsImmediately()) graph.assignID(edge);
+            // 将edge存放到addRelation中，待commit阶段使用
             connectRelation(edge);
             return edge;
         } finally {
+            // 释放锁
             uniqueLock.unlock();
         }
     }

@@ -67,18 +67,18 @@ public class StandardEdge extends AbstractEdge implements StandardRelation, Reas
     public void setPropertyDirect(PropertyKey key, Object value) {
         Preconditions.checkArgument(!(key instanceof ImplicitKey), "Cannot use implicit type [%s] when setting property", key.name());
         if (properties == EMPTY_PROPERTIES) {
-            if (tx().getConfiguration().isSingleThreaded()) {
-                properties = new HashMap<>(5);
+            if (tx().getConfiguration().isSingleThreaded()) { // 单线程条件下
+                properties = new HashMap<>(5); // 初始化
             } else {
-                synchronized (this) {
+                synchronized (this) { // 多线程条件下，加锁保证并发安全
                     if (properties == EMPTY_PROPERTIES) {
                         properties = Collections.synchronizedMap(new HashMap<PropertyKey, Object>(5));
                     }
                 }
             }
         }
-        tx().checkPropertyConstraintForEdgeOrCreatePropertyConstraint(this, key);
-        properties.put(key, value);
+        tx().checkPropertyConstraintForEdgeOrCreatePropertyConstraint(this, key);// 检查edge和property key的约束关系是否满足要求
+        properties.put(key, value);// 将property key作为key、property value值作为value
     }
 
     @Override

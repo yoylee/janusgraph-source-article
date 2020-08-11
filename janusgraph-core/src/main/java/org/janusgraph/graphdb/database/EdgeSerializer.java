@@ -240,44 +240,44 @@ public class EdgeSerializer implements RelationReader {
                                           TypeInspector tx) {
         assert type==relation.getType() || (type.getBaseType() != null
                 && type.getBaseType().equals(relation.getType()));
-        Direction dir = EdgeDirection.fromPosition(position);
+        Direction dir = EdgeDirection.fromPosition(position); // 获取当前边针对于当前节点的 方向
         Preconditions.checkArgument(type.isUnidirected(Direction.BOTH) || type.isUnidirected(dir));
-        long typeId = type.longId();
-        DirectionID dirID = getDirID(dir, relation.isProperty() ? RelationCategory.PROPERTY : RelationCategory.EDGE);
+        long typeId = type.longId();// 获取relation对应type的 id； schema节点都是创建schema时插入的
+        DirectionID dirID = getDirID(dir, relation.isProperty() ? RelationCategory.PROPERTY : RelationCategory.EDGE);// 获取当前relation对应边的方向的标识；属性的relation 和 边的relation不同
 
-        DataOutput out = serializer.getDataOutput(DEFAULT_CAPACITY);
+        DataOutput out = serializer.getDataOutput(DEFAULT_CAPACITY);// 初始化存放序列化数据的数据结构！
         int valuePosition;
-        IDHandler.writeRelationType(out, typeId, dirID, type.isInvisibleType());
-        Multiplicity multiplicity = type.multiplicity();
+        IDHandler.writeRelationType(out, typeId, dirID, type.isInvisibleType());// 写入label id + edge方向
+        Multiplicity multiplicity = type.multiplicity(); // 获取type的多重性
 
-        long[] sortKey = type.getSortKey();
+        long[] sortKey = type.getSortKey(); // 获取sort key配置
         assert !multiplicity.isConstrained() || sortKey.length==0: type.name();
-        int keyStartPos = out.getPosition();
+        int keyStartPos = out.getPosition();// ===sort key===开始的字节位置
         if (!multiplicity.isConstrained()) {
-            writeInlineTypes(sortKey, relation, out, tx, InlineType.KEY);
+            writeInlineTypes(sortKey, relation, out, tx, InlineType.KEY);// 写入配置的sort key数据；（方法内部分析）
         }
-        int keyEndPos = out.getPosition();
+        int keyEndPos = out.getPosition();// ===sort key===结束的字节位置
 
-        long relationId = relation.longId();
+        long relationId = relation.longId();// 获取edge 或者 property的唯一id
 
         //How multiplicity is handled for edges and properties is slightly different
-        if (relation.isEdge()) {
-            long otherVertexId = relation.getVertex((position + 1) % 2).longId();
-            if (multiplicity.isConstrained()) {
-                if (multiplicity.isUnique(dir)) {
-                    valuePosition = out.getPosition();
-                    VariableLong.writePositive(out, otherVertexId);
+        if (relation.isEdge()) { // 处理edge类型
+            long otherVertexId = relation.getVertex((position + 1) % 2).longId(); // 获取边的另一个Vertex id
+            if (multiplicity.isConstrained()) { // 如果label的多重性是被约束的（不等于MULTI和SIMPLE）
+                if (multiplicity.isUnique(dir)) {// 如果当前边方向在多重性的约束下为 唯一的
+                    valuePosition = out.getPosition();// TODO
+                    VariableLong.writePositive(out, otherVertexId);// TODO
                 } else {
-                    VariableLong.writePositiveBackward(out, otherVertexId);
-                    valuePosition = out.getPosition();
+                    VariableLong.writePositiveBackward(out, otherVertexId);// TODO
+                    valuePosition = out.getPosition();// TODO
                 }
-                VariableLong.writePositive(out, relationId);
+                VariableLong.writePositive(out, relationId);// TODO
             } else {
-                VariableLong.writePositiveBackward(out, otherVertexId);
-                VariableLong.writePositiveBackward(out, relationId);
-                valuePosition = out.getPosition();
+                VariableLong.writePositiveBackward(out, otherVertexId);// 写入adjacent vertex id； 是写入的两个节点的差值
+                VariableLong.writePositiveBackward(out, relationId);// 写入edge 唯一id
+                valuePosition = out.getPosition();// 获取column占用的字节数
             }
-        } else {
+        } else {// 处理property类型
             assert relation.isProperty();
             Preconditions.checkArgument(relation.isProperty());
             Object value = ((JanusGraphVertexProperty) relation).value();
@@ -302,17 +302,17 @@ public class EdgeSerializer implements RelationReader {
             }
         }
 
-        //Write signature
+        //Write signature 写入edge才会存在的signature key数据
         long[] signature = type.getSignature();
         writeInlineTypes(signature, relation, out, tx, InlineType.SIGNATURE);
 
         //Write remaining properties
-        LongSet writtenTypes = new LongHashSet(sortKey.length + signature.length);
+        LongSet writtenTypes = new LongHashSet(sortKey.length + signature.length); // 存储当前edge配置的所有sort key 和 signature key的 label id
         if (sortKey.length > 0 || signature.length > 0) {
             for (long id : sortKey) writtenTypes.add(id);
             for (long id : signature) writtenTypes.add(id);
         }
-        LongArrayList remainingTypes = new LongArrayList(8);
+        LongArrayList remainingTypes = new LongArrayList(8); // 存储去除上述已经存储过的sort key和signature key属性值的其他属性值！
         for (PropertyKey t : relation.getPropertyKeysDirect()) {
             if (!(t instanceof ImplicitKey) && !writtenTypes.contains(t.longId())) {
                 remainingTypes.add(t.longId());
@@ -320,7 +320,7 @@ public class EdgeSerializer implements RelationReader {
         }
         //Sort types before writing to ensure that value is always written the same way
         long[] remaining = remainingTypes.toArray();
-        Arrays.sort(remaining);
+        Arrays.sort(remaining);// 对属性label id进行排序，按照排序的顺序存储
         for (long tid : remaining) {
             PropertyKey t = tx.getExistingPropertyKey(tid);
             writeInline(out, t, relation.getValueDirect(t), InlineType.NORMAL);
@@ -349,18 +349,18 @@ public class EdgeSerializer implements RelationReader {
     private void writeInlineTypes(long[] keyIds, InternalRelation relation, DataOutput out, TypeInspector tx,
                                   InlineType inlineType) {
         for (long keyId : keyIds) {
-            PropertyKey t = tx.getExistingPropertyKey(keyId);
-            writeInline(out, t, relation.getValueDirect(t), inlineType);
+            PropertyKey t = tx.getExistingPropertyKey(keyId);// 根据key id获取对应的对象
+            writeInline(out, t, relation.getValueDirect(t), inlineType); // 将key 和 value写入到
         }
     }
 
     private void writeInline(DataOutput out, PropertyKey inlineKey, Object value, InlineType inlineType) {
         assert inlineType.writeInlineKey() || !InternalAttributeUtil.hasGenericDataType(inlineKey);
 
-        if (inlineType.writeInlineKey()) {
-            IDHandler.writeInlineRelationType(out, inlineKey.longId());
+        if (inlineType.writeInlineKey()) { // 不等于sort key 和 SIGNATURE类型
+            IDHandler.writeInlineRelationType(out, inlineKey.longId()); // 则插入key的label id
         }
-
+        // 插图
         writePropertyValue(out,inlineKey,value, inlineType);
     }
 
@@ -369,13 +369,17 @@ public class EdgeSerializer implements RelationReader {
     }
 
     private void writePropertyValue(DataOutput out, PropertyKey key, Object value, InlineType inlineType) {
-        if (InternalAttributeUtil.hasGenericDataType(key)) {
+        if (InternalAttributeUtil.hasGenericDataType(key)) {// 处理key的数据类型为Object类型
             assert !inlineType.writeByteOrdered();
             out.writeClassAndObject(value);
-        } else {
+        } else { // 处理key的数据类型为非Object类型
             assert value==null || value.getClass().equals(key.dataType());
-            if (inlineType.writeByteOrdered()) out.writeObjectByteOrder(value, key.dataType());
-            else out.writeObject(value, key.dataType());
+            // 是否需要顺序写入
+            // 在sort key的情况下，需要顺序写入！ 其他情况下不需要
+            if (inlineType.writeByteOrdered())
+                out.writeObjectByteOrder(value, key.dataType());
+            else
+                out.writeObject(value, key.dataType());
         }
     }
 

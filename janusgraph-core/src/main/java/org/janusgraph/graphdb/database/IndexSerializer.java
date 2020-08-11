@@ -267,10 +267,10 @@ public class IndexSerializer {
 
     public Collection<IndexUpdate> getIndexUpdates(InternalRelation relation) {
         assert relation.isNew() || relation.isRemoved();
-        final Set<IndexUpdate> updates = Sets.newHashSet();
-        final IndexUpdate.Type updateType = getUpdateType(relation);
-        final int ttl = updateType==IndexUpdate.Type.ADD?StandardJanusGraph.getTTL(relation):0;
-        for (final RelationType type : relation.getPropertyKeysDirect()) {
+        final Set<IndexUpdate> updates = Sets.newHashSet(); // 初始化存储索引更新的数据结构
+        final IndexUpdate.Type updateType = getUpdateType(relation);// 获取更新状态：ADD or DEL
+        final int ttl = updateType==IndexUpdate.Type.ADD?StandardJanusGraph.getTTL(relation):0;// 如果为ADD一个relation，则获取relation配置的过期ttl
+        for (final RelationType type : relation.getPropertyKeysDirect()) { //  relation.getPropertyKeysDirect()获取所有属性的key对象！包含：tx、对应的索引、ttl等信息
             if (!(type instanceof PropertyKey)) continue;
             final PropertyKey key = (PropertyKey)type;
             for (final IndexType index : ((InternalRelationType)key).getKeyIndexes()) {

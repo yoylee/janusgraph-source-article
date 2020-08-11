@@ -33,16 +33,16 @@ public class EdgeOperationTest extends BaseTest {
 
     @Test
     public void addEdgeTest(){
-        Vertex sourceVertex = graph.traversal().V().has("name", "liyangyang5").next();
+        Vertex sourceVertex = graph.traversal().V().has("name", "lyy_07_7").next();
         Assert.assertNotNull(sourceVertex);
 
-        Vertex targetVertex = graph.traversal().V().has("name", "liyangyang6").next();
+        Vertex targetVertex = graph.traversal().V().has("name", "lyy_07_8").next();
         Assert.assertNotNull(targetVertex);
 
-        Edge edge = sourceVertex.addEdge("lives", targetVertex, "reason", "his love you baby~", "edge_no_index", "test_value");
-        Edge edge2 = sourceVertex.addEdge("father", targetVertex, "edge_no_index", "test_value");
+        Edge edge = sourceVertex.addEdge("friendDesc", targetVertex, "reason", "is your friend", "since", new Date());
+//        Edge edge2 = sourceVertex.addEdge("father", targetVertex, "edge_no_index", "test_value");
         Assert.assertNotNull(edge);
-        Assert.assertNotNull(edge2);
+//        Assert.assertNotNull(edge2);
     }
 
     @Test

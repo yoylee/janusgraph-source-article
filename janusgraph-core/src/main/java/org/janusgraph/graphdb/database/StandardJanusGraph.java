@@ -563,7 +563,7 @@ public class StandardJanusGraph extends JanusGraphBlueprintsGraph {
             for (int pos = 0; pos < add.getLen(); pos++) {
                 InternalVertex vertex = add.getVertex(pos);
                 if (pos == 0 || !add.isLoop()) {
-                    if (add.isProperty()) mutatedProperties.put(vertex,add);
+                    if (add.isProperty()) mutatedProperties.put(vertex,add); // 此处只操作属性类型的relation，但是在导入edge数据时，addRelation只有edge数据，没有对应edge的属性对应的relation。所以在后面3)步骤无法获取属性对应的索引，而是在下述的indexUpdates.addAll(indexSerializer.getIndexUpdates(add));语句获取！
                     mutations.put(vertex.longId(), add);
                 }
                 // 判定
@@ -587,7 +587,7 @@ public class StandardJanusGraph extends JanusGraphBlueprintsGraph {
         //4) Acquire index locks (deletions first)
         // 获取所有删除更新的 index锁（此处的获取锁只是将对应的KLV存储到Hbase中！存储成功并不代表获取锁成功）
         for (IndexSerializer.IndexUpdate update : indexUpdates) {
-            if (!update.isCompositeIndex() || !update.isDeletion()) continue;
+            if (!update.isCompositeIndex() || !update.isDeletion()) continue; // 此处只处理组合索引 && 要删除的组合索引
             CompositeIndexType iIndex = (CompositeIndexType) update.getIndex();
             // 判断1. 当前索引需要获取锁
             // 2. 当前索引的属性Cardinality不为List类型
@@ -597,7 +597,7 @@ public class StandardJanusGraph extends JanusGraphBlueprintsGraph {
         }
         // 获取所有增加更新的 index锁
         for (IndexSerializer.IndexUpdate update : indexUpdates) {
-            if (!update.isCompositeIndex() || !update.isAddition()) continue;
+            if (!update.isCompositeIndex() || !update.isAddition()) continue;// 此处只处理组合索引 && 要添加的组合索引
             CompositeIndexType iIndex = (CompositeIndexType) update.getIndex();
             // 判断1. 当前索引需要获取锁
             // 2. 当前索引的属性Cardinality不为List类型
@@ -611,20 +611,20 @@ public class StandardJanusGraph extends JanusGraphBlueprintsGraph {
         // 添加关系的更新  在持久化数据时， 节点包含的属性 节点-边 都是以relation的形式存在
         for (Long vertexId : mutations.keySet()) {
             Preconditions.checkArgument(vertexId > 0, "Vertex has no id: %s", vertexId);
-            final List<InternalRelation> edges = mutations.get(vertexId);
+            final List<InternalRelation> edges = mutations.get(vertexId); // 获取上述整理的数据，节点id对应的所有relation
             final List<Entry> additions = new ArrayList<>(edges.size());
             final List<Entry> deletions = new ArrayList<>(Math.max(10, edges.size() / 10));
             for (final InternalRelation edge : edges) {
-                final InternalRelationType baseType = (InternalRelationType) edge.getType();
+                final InternalRelationType baseType = (InternalRelationType) edge.getType();// 获取当前edge的type
                 assert baseType.getBaseType()==null;
 
-                for (InternalRelationType type : baseType.getRelationIndexes()) {
+                for (InternalRelationType type : baseType.getRelationIndexes()) { // 针对于edge数据，遍历两次，因为是按边切割，所以在序列化时，每个节点都有对应的所有边信息
                     if (type.getStatus()== SchemaStatus.DISABLED) continue;
                     for (int pos = 0; pos < edge.getArity(); pos++) {
                         if (!type.isUnidirected(Direction.BOTH) && !type.isUnidirected(EdgeDirection.fromPosition(pos)))
                             continue; //Directionality is not covered
                         if (edge.getVertex(pos).longId()==vertexId) {
-                            StaticArrayEntry entry = edgeSerializer.writeRelation(edge, type, pos, tx);
+                            StaticArrayEntry entry = edgeSerializer.writeRelation(edge, type, pos, tx); // 重要！！ 序列化edge数据！！！！
                             if (edge.isRemoved()) {
                                 deletions.add(entry);
                             } else {
@@ -640,8 +640,8 @@ public class StandardJanusGraph extends JanusGraphBlueprintsGraph {
                 }
             }
 
-            StaticBuffer vertexKey = idManager.getKey(vertexId);
-            mutator.mutateEdges(vertexKey, additions, deletions);
+            StaticBuffer vertexKey = idManager.getKey(vertexId); // 获取对应的Rowkey
+            mutator.mutateEdges(vertexKey, additions, deletions);// 将需要插入的数据存放到地方存储的事务对象上，为持久化的数据做准备
         }
 
         //6) Add index updates
@@ -754,7 +754,7 @@ public class StandardJanusGraph extends JanusGraphBlueprintsGraph {
 
             //[FAILURE] Exceptions during preparation here cause the entire transaction to fail on transactional systems
             //or just the non-system part on others. Nothing has been persisted unless batch-loading
-            // 准备提交的数据（组装hbase数据、获取分布式锁等），包含两种情况
+            // 准备提交的数据（序列化数据！组装hbase数据！获取分布式锁等），包含两种情况
             // 1. 抛出异常，则当前事务直接失败，回滚; 批量导入的话，只是当前插入的数据失败，其他的不会回滚
             // 2. 未抛出异常，则组装数据成功
             commitSummary = prepareCommit(addedRelations,deletedRelations, hasTxIsolation? NO_FILTER : NO_SCHEMA_FILTER, mutator, tx, acquireLocks);
