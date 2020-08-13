@@ -37,7 +37,7 @@ public class JanusGraphStepStrategy extends AbstractTraversalStrategy<TraversalS
     public void apply(final Traversal.Admin<?, ?> traversal) {
         if (TraversalHelper.onGraphComputer(traversal))
             return;
-
+        // 获取初始的图算子GraphStep； 也就是获取V() E()等这种类型产生的算子！
         TraversalHelper.getStepsOfClass(GraphStep.class, traversal).forEach(originalGraphStep -> {
             if (originalGraphStep.getIds() == null || originalGraphStep.getIds().length == 0) {
                 //Try to optimize for index calls

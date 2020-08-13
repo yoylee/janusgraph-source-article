@@ -65,10 +65,10 @@ public class JanusGraphStep<S, E extends Element> extends GraphStep<S, E> implem
     private QueryProfiler queryProfiler = QueryProfiler.NO_OP;
 
 
-    public JanusGraphStep(final GraphStep<S, E> originalStep) {
-        super(originalStep.getTraversal(), originalStep.getReturnClass(), originalStep.isStartStep(), originalStep.getIds());
+    public JanusGraphStep(final GraphStep<S, E> originalStep) { // 执行真正查询的对象
+        super(originalStep.getTraversal(), originalStep.getReturnClass(), originalStep.isStartStep(), originalStep.getIds()); // 赋值执行算子的信息
         originalStep.getLabels().forEach(this::addLabel);
-        this.setIteratorSupplier(() -> {
+        this.setIteratorSupplier(() -> { // 将查询语句lambda语句添加；但是在执行策略时未执行，只是赋值！ 执行get后才会执行
             if (this.ids == null) {
                 return Collections.emptyIterator();
             }
@@ -91,7 +91,7 @@ public class JanusGraphStep<S, E extends Element> extends GraphStep<S, E> implem
 
             final GraphCentricQueryBuilder builder = (GraphCentricQueryBuilder) tx.query();
             final List<Iterator<E>> responses = new ArrayList<>();
-            queries.entries().forEach(q ->  executeGraphCentricQuery(builder, responses, q));
+            queries.entries().forEach(q ->  executeGraphCentricQuery(builder, responses, q)); // 真正的执行查询
 
             return new MultiDistinctOrderedIterator<E>(lowLimit, highLimit, responses, orders);
         });
@@ -152,7 +152,7 @@ public class JanusGraphStep<S, E extends Element> extends GraphStep<S, E> implem
     private void executeGraphCentricQuery(final GraphCentricQueryBuilder builder, final List<Iterator<E>> responses,
             final Entry<Integer, GraphCentricQuery> query) {
         final Class<? extends JanusGraphElement> graphClass = Vertex.class.isAssignableFrom(this.returnClass) ? JanusGraphVertex.class: JanusGraphEdge.class;
-        final Iterator<E> response = (Iterator<E>) builder.iterables(query.getValue(), graphClass).iterator();
+        final Iterator<E> response = (Iterator<E>) builder.iterables(query.getValue(), graphClass).iterator(); // 真正执行查询的代码
         long i = 0;
         while (i < query.getKey() && response.hasNext()) {
             response.next();
