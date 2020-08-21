@@ -1,117 +1,47 @@
-本项目，用于对janusgraph源码分析过程中的过程提交记录
+## 源码分析
 
 [![JanusGraph logo](janusgraph.png)](https://janusgraph.org/)
 
-JanusGraph is a highly scalable [graph database](https://en.wikipedia.org/wiki/Graph_database)
-optimized for storing and querying large graphs with billions of vertices and edges
-distributed across a multi-machine cluster. JanusGraph is a transactional database that
-can support thousands of concurrent users, complex traversals, and analytic graph queries.
+JanusGraph是一个图形数据库引擎，本身专注于紧凑图形序列化，丰富的图形数据建模和高效的查询。
 
-[![Downloads][downloads-shield]][downloads-link]
-[![Maven][maven-shield]][maven-link]
-[![Javadoc][javadoc-shield]][javadoc-link]
-[![Build Status][travis-shield]][travis-link]
-[![Codecov][codecov-shield]][codecov-link]
-[![Coverity Scan][coverity-shield]][coverity-link]
+### 提交记录
+1. 2020-6-5：完成初始源码编译和单元测试运行
+2. 2020-6-8：完善单元测试，单测结束时关闭图实例和事务
+3. 2020-7-2：添加es鉴权连接
+4. 2020-7-9：官方测试图-诸神之图分析
+5. 2020-7-23：JanusGraph**锁机制**源码分析
+6. 2020-7-31：JanusGraph**分布式id生成逻辑**源码分析
+7. 2020-8-10：JanusGraph**写（导入）数据机制分析**&&锁机制补充分析
+8. 2020-8-11：补充写机制源码分析
+9. 2020-8-13：查询过程源码简单分析（涉及gremlin源码文件）
+10. 待续。。。
 
-[travis-shield]: https://travis-ci.org/JanusGraph/janusgraph.svg?branch=master
-[travis-link]: https://travis-ci.org/JanusGraph/janusgraph
-[maven-shield]: https://img.shields.io/maven-central/v/org.janusgraph/janusgraph-core.svg
-[maven-link]: https://search.maven.org/#search%7Cga%7C1%7Corg.janusgraph
-[javadoc-shield]: https://javadoc.io/badge/org.janusgraph/janusgraph-core.svg?color=blue
-[javadoc-link]: https://javadoc.io/doc/org.janusgraph/janusgraph-core
-[downloads-shield]: https://img.shields.io/github/downloads/JanusGraph/janusgraph/total.svg
-[downloads-link]: https://github.com/JanusGraph/janusgraph/releases
-[codecov-shield]:https://codecov.io/gh/JanusGraph/janusgraph/branch/master/graph/badge.svg
-[codecov-link]:https://codecov.io/gh/JanusGraph/janusgraph
-[coverity-shield]: https://img.shields.io/coverity/scan/janusgraph-janusgraph.svg
-[coverity-link]: https://scan.coverity.com/projects/janusgraph-janusgraph
+### 相关文章
 
-## Learn More
+#### 源码分析相关：
+[源码图库-一文搞定janusgraph图数据库的本地源码编译（janusgraph source code compile）](https://liyangyang.blog.csdn.net/article/details/106674499)
 
-The [project homepage](https://janusgraph.org) contains more information on JanusGraph and
-provides links to documentation, getting-started guides and release downloads.
+图解图库JanusGraph系列-一文知晓导入数据流程（待发布）
 
-## Visualization
+图解图库JanusGraph系列-简要分析查询读数据流程（待发布）
 
-To visualize graphs stored in JanusGraph, you can use any of the following
-tools:
+图解图库JanusGraph系列-一文知晓锁机制（本地锁+分布式锁）（待发布）
 
-* [Arcade Analytics](https://arcadeanalytics.com/usermanual/#arcade-analytics)
-* [Cytoscape](http://www.cytoscape.org/)
-* [Gephi](https://tinkerpop.apache.org/docs/current/reference/#gephi-plugin)
-  plugin for Apache TinkerPop
-* [Graphexp](https://github.com/bricaud/graphexp)
-* [KeyLines by Cambridge Intelligence](https://cambridge-intelligence.com/visualizing-janusgraph-new-titandb-fork/)
-* [Linkurious](https://doc.linkurio.us/ogma/latest/tutorials/janusgraph/)
-* [Tom Sawyer Perspectives](https://www.tomsawyer.com/perspectives/)
+图解图库JanusGraph系列-一文知晓分布式id生成策略（待发布）
 
-## Community
+图解图库JanusGraph系列-一文知晓图库存储分区策略（待发布）
 
-* Chat: join us on [Gitter](https://gitter.im/JanusGraph/janusgraph)
+#### 存储结构相关：
+[图解图库JanusGraph系列-一文知晓图数据底层存储结构](https://mp.weixin.qq.com/s?__biz=MzAwODkwMDk4OQ==&mid=2247483894&idx=1&sn=0d7b98d8d7abf86bfacf8c86b694651d&chksm=9b6699e4ac1110f2626789d78aaf617dc02b7a9cdad320c5273172a6fa3a21d8f40d63958461&token=1631136587&lang=zh_CN#rd)
 
-* Stack Overflow: see the
-  [`janusgraph`](https://stackoverflow.com/questions/tagged/janusgraph) tag
+#### 其他：
+[解惑图数据库！你知道什么是图数据库吗？](https://mp.weixin.qq.com/s?__biz=MzAwODkwMDk4OQ==&mid=2247483830&idx=1&sn=71ad0d9e0d5868ae15011b7744c0fe8f&chksm=9b6699a4ac1110b294487a6987be5392a5093405a7a40f58d4bca697a18d64000db1aeda0a6f&token=1631136587&lang=zh_CN#rd)
 
-* Twitter: follow [@JanusGraph](https://twitter.com/JanusGraph) for news and
-  updates
+图解图库JanusGraph系列-官方测试图:诸神之图分析（待发布）
 
-* Mailing lists:
+## 个人博客
+**CSDN**：[https://liyangyang.blog.csdn.net/](https://liyangyang.blog.csdn.net/)
 
-  * **janusgraph-users (at) googlegroups.com**
-    ([archives](https://groups.google.com/group/janusgraph-users))
-    for questions about using JanusGraph, installation, configuration, integrations
+**公众号**：[匠心Java]    （文章首发）
 
-    To join with a Google account, use the [web
-    UI](https://groups.google.com/forum/#!forum/janusgraph-users/join); to
-    subscribe/unsubscribe with an arbitrary email address, send an email to:
-
-    * janusgraph-users+subscribe (at) googlegroups.com
-    * janusgraph-users+unsubscribe (at) googlegroups.com
-
-  * **janusgraph-dev (at) googlegroups.com**
-    ([archives](https://groups.google.com/group/janusgraph-dev))
-    for internal implementation of JanusGraph itself
-
-    To join with a Google account, use the [web
-    UI](https://groups.google.com/forum/#!forum/janusgraph-dev/join); to
-    subscribe/unsubscribe with an arbitrary email address, send an email to:
-
-    * janusgraph-dev+subscribe (at) googlegroups.com
-    * janusgraph-dev+unsubscribe (at) googlegroups.com
-
-## Contributing
-
-Please see [`CONTRIBUTING.md`](CONTRIBUTING.md) for more information, including
-CLAs and best practices for working with GitHub.
-
-## Powered by JanusGraph
-
-* [Apache Atlas](https://github.com/apache/atlas) - metadata management for governance ([website](https://atlas.apache.org/))
-* [Eclipse Keti](https://github.com/eclipse/keti) - access control service to protect RESTful APIs ([website](https://projects.eclipse.org/projects/iot.keti))
-* [Exakat](https://github.com/exakat/exakat) - PHP static analysis ([website](https://www.exakat.io/))
-* [Open Network Automation Platform (ONAP)](https://www.onap.org/) - automation and orchestration for Software-Defined Networks
-* [Unifi Catalog & Discovery](https://unifisoftware.com/product/data-catalog) - JanusGraph is embedded into the Unifi Data Catalog UI to enable users to determine how datasets and attributes are related.
-- [Uber Knowledge Graph](https://www.youtube.com/watch?v=C01Gh0g01JE) ([event info](https://leap.ai/events/2017/08/06/uber_knowledge_graph))
-- [Express-Cassandra](https://github.com/masumsoft/express-cassandra) - Cassandra ORM/ODM/OGM for Node.js with optional support for Elassandra & JanusGraph
-* [Windup](https://github.com/windup/windup) by RedHat - application migration and assessment tool ([website](https://developers.redhat.com/products/rhamt/overview/))
-
-## Users
-
-The following users have deployed JanusGraph in production.
-
-* [CELUM](https://www.celum.com/) - [use case and system architecture](https://www.celum.com/en/graph-driven-and-reactive-architecture)
-* [FiNC](https://finc.com)
-* [G DATA](https://gdatasoftware.com) - [blog post series about malware analysis use case](https://www.gdatasoftware.com/blog/2018/11/31203-malware-analysis-with-a-graph-database)
-* [Netflix](https://www.netflix.com) -
-  [video](https://youtu.be/KSmAdtMJYEo?t=1h2m17s) and
-  [slides](https://www.slideshare.net/RoopaTangirala/polyglot-persistence-netflix-cde-meetup-90955706#86) (graph discussion starts at #86)
-* [Qihoo 360](https://www.360.cn/) ([about](https://en.wikipedia.org/wiki/Qihoo_360))
-* [Red Hat](https://www.redhat.com/) - [application migration and assessment tool](https://developers.redhat.com/products/rhamt/overview/) built on [Windup](https://github.com/windup/windup)
-* [Sift Security](https://siftsecurity.com)
-* [Times Internet](http://timesinternet.in) - [blog post about CMS use case](http://denmarkblog.timesinternet.in/blogs/graph/times-internet-is-using-janusgraph-as-main-database-in-cms-for-all-newsrooms/articleshow/63709837.cms) (the CMS which is serving this blog post runs on JanusGraph)
-* [Uber](https://uber.com)
-
-The following companies offer JanusGraph hosted as-a-service:
-
-* [IBM](https://www.compose.com/databases/janusgraph)
+[![公众号 logo](1.png)](https://janusgraph.org/)
