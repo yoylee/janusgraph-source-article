@@ -1,16 +1,17 @@
+
 > 本系列博文会不断更新和修改，大家可以收藏该文章或关注博主，便于以后的查找；
->
-> 本次更新时间：2020/12/11日
+
+> 本次更新时间：2020/12/22日
 
 
 
 ## 介绍一下
 
-博主从2018年因为业务原因开始接触图数据库，在金融公司做`金融欺诈风控`相关业务；
+博主从2018年因为业务原因开始接触图数据库，在金融公司做`金融欺诈风控`相关业务，写该系列文章的目的主要是在图库使用中深感图库的资料较少，希望可以为图数据库社区做一些微薄的贡献，与君共勉
 
 主要使用图库：**JanusGraph**
 
-了解图库：**Neo4j**
+了解图库：**Neo4j**、**Nebula Graph**
 
 ----
 
@@ -25,11 +26,9 @@
 **博主微信：** `l（小写L）yy1591992570` or `18864803272`    欢迎加我好友相互沟通学习！
 
 **博主公众号：**  `匠心Java`   正在完善中~
-
 ![20200814183421838](http://images.coderstudy.vip/二维码.png)
 
 ----
-
 ## 注意
 
 所有博文都是博主基于日常的实践、官网和源码 总结而来，才疏学浅难免有遗漏错误之处，请大家在浏览博文时`带着‘审视’和‘怀疑’的眼光`！！！
@@ -42,29 +41,31 @@
 
 #### 已发布
 
-1. 【原创】[解惑图数据库！你知道什么是图数据库吗？](https://liyangyang.blog.csdn.net/article/details/106384973)
-2. 【原创】[源码图库-一文搞定janusgraph图数据库的本地源码编译（janusgraph source code compile）](https://liyangyang.blog.csdn.net/article/details/106674499)
-3. 【原创】[图解图库JanusGraph系列-一文知晓“图数据“底层存储结构（JanusGraph data model）](https://liyangyang.blog.csdn.net/article/details/107999814)
+1. 【原创】[图解JanusGraph系列-解惑图数据库！你知道什么是图数据库吗？](https://liyangyang.blog.csdn.net/article/details/106384973)
+2. 【原创】[图解JanusGraph系列-一文搞定janusgraph图数据库的本地源码编译（janusgraph source code compile）](https://liyangyang.blog.csdn.net/article/details/106674499)
+3. 【原创】[图解JanusGraph系列-一文知晓“图数据“底层存储结构（JanusGraph data model）](https://liyangyang.blog.csdn.net/article/details/107999814)
 4. 【原创】[图解Janusgraph系列-分布式id生成策略分析](https://liyangyang.blog.csdn.net/article/details/108000639)
 5. 【原创】[图解Janusgraph系列-查询图数据过程源码分析](https://liyangyang.blog.csdn.net/article/details/108000561)
-6. 【翻译】[JanusGraph -- 索引详解（janusgraph index）](https://liyangyang.blog.csdn.net/article/details/98513704)
-7. 【翻译】[JanusGraph -- 事务详解（janusgraph transactions）](https://liyangyang.blog.csdn.net/article/details/98656078)
-8. 【翻译】[JanusGraph -- 缓存（janusgraph caching）](https://liyangyang.blog.csdn.net/article/details/98656781)
-9. 【翻译】[JanusGraph -- 索引参数与全文索引查询（janusgraph Index parameters and full text search）](https://liyangyang.blog.csdn.net/article/details/98657833)
-10. 【翻译】[JanusGraph -- 查询谓词和数据类型（janusgraph Search predicates and data types）](https://liyangyang.blog.csdn.net/article/details/98659157)
+6. 【原创】[图解Janusgraph系列-Lock锁机制(本地锁+分布式锁)分析](https://liyangyang.blog.csdn.net/article/details/108000791)
+7. 【原创】[图解Janusgraph系列-图数据底层序列化源码分析（Data Serialize）](https://liyangyang.blog.csdn.net/article/details/111315187)
+8. 【原创】[图解Janusgraph系列-官方测试图：诸神之图（Graph of the gods）分析](https://liyangyang.blog.csdn.net/article/details/111315452)
+9. 【原创】[图解NebulaGraph-开源国产分布式图数据库！](https://liyangyang.blog.csdn.net/article/details/111319567)
+10. 【原创】[图解JanusGraph系列-生成Hbase file离线批量导入方案](https://liyangyang.blog.csdn.net/article/details/111479347)
+11. 【原创】[图解JanusGraph系列 - 关于JanusGraph图数据批量快速导入的方案和想法（bulk load data）](https://liyangyang.blog.csdn.net/article/details/111559639)
+12. 【翻译】[JanusGraph -- 索引详解（janusgraph index）](https://liyangyang.blog.csdn.net/article/details/98513704)
+13. 【翻译】[JanusGraph -- 事务详解（janusgraph transactions）](https://liyangyang.blog.csdn.net/article/details/98656078)
+14. 【翻译】[JanusGraph -- 缓存（janusgraph caching）](https://liyangyang.blog.csdn.net/article/details/98656781)
+15. 【翻译】[JanusGraph -- 索引参数与全文索引查询（janusgraph Index parameters and full text search）](https://liyangyang.blog.csdn.net/article/details/98657833)
+16. 【翻译】[JanusGraph -- 查询谓词和数据类型（janusgraph Search predicates and data types）](https://liyangyang.blog.csdn.net/article/details/98659157)
 
 #### 待发布
 
 1. 【原创】图数据库-聊聊图数据库图数据底层存储几种结构
 2. 【原创】图数据库-图库中超级点问题的思考（Super Node）
-3. 【原创】图解JanusGraph系列-并发控制锁机制策略分析（Lock）
-4. 【原创】图解JanusGraph系列-数据插入流程分析（Data Insert）
 5. 【原创】图解JanusGraph系列-JanusGraph中超级点问题解决策略分析:Vertex-centric Indexes与点切割（Super Node）
 6. 【原创】图解JanusGraph系列-查询优化（组件优化、gremlin语句优化）（Query Optimization）
 7. 【原创】图解JanusGraph系列-一文搞定常用Gremlin语句！
-8. 【原创】图解JanusGraph系列-单元测试JanusGraph（Unit Test JanusGraph）
 9. 【原创】图解JanusGraph系列-如何更好的设计图Schema？（Design JanusGraph Schema）
-10. 【原创】图解JanusGraph系列-关于图数据批量快速导入的一些方案和想法（Bulk Loader）
 
 #### 待整理
 
@@ -72,10 +73,13 @@
 2. 【原创】图解JanusGraph系列-分区详解（分区机制、基于业务分区优化）
 3. 【原创】图解JanusGraph系列-如何监控JanusGraph？（Monitoring JanusGraph）
 4. 【原创】图解JanusGraph系列-缓存详解与应用（JanusGraph Caching）
+5. 【原创】图解JanusGraph系列-如何使用Hadoop、Spark进行OLAP分析（OLAP）
+6. 【原创】图解JanusGraph系列-细数JanusGraph的多种部署配置方式（JanusGraph Deploy and Configuration）
+7. 【原创】图解JanusGraph系列-细数JanusGraph当前存在的限制和缺点（Technical Limitations）
+8. 【原创】图解JanusGraph系列-如何对JanusGraph进行单元测试（Unit Test JanusGraph）
 
 
 ----
-
 ## 源码分析
 
 JanusGraph-0.5.2源码解析GitHub仓库：[https://github.com/YYDreamer/janusgraph](https://github.com/YYDreamer/janusgraph)   欢迎star~
